@@ -220,6 +220,8 @@ Click **📁 Browse Files** to open the file browser.
 
 When you do a face swap and there's an object in front of the face (microphone, hand, glasses, food, etc.), the swap normally overwrites those pixels too. This node generates a protection mask that tells ReActor *"don't touch these pixels"* so the object stays intact.
 
+![Demo Screenshot](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/occlusion_mask.png) 
+
 ### How It Works
 
 The node runs two AI models on your image:
