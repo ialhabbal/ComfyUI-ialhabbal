@@ -1,15 +1,15 @@
 [project]
-name = "ialhabbal"
-description = "Custom Nodes Suite To browse and load images and extract prompts form them"
+name = "ComfyUI-ialhabbal"
+description = "A comprehensive suite of ComfyUI custom nodes for image processing, prompt verification, comparison, extraction, occlusion masking, batch loading, and advanced saving."
 version = "1.0.0"
 license = { file = "LICENSE" }
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/ialhabbal/ialhabbal"
+Repository = "https://github.com/ialhabbal/ComfyUI-ialhabbal"
 
 [tool.comfy]
 PublisherId = "ialhabbal"
-DisplayName = "meta_prompt_extractor"
-Icon = "https://raw.githubusercontent.com/ialhabbal/meta_prompt_extractor/main/media/meta_prompt_extractor.png"
+DisplayName = "ComfyUI-ialhabbal"
+Icon = "https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ComfyUI-ialhabbal.png"
 includes = []
