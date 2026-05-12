@@ -20,7 +20,7 @@ A comprehensive suite of ComfyUI custom nodes for image processing, prompt verif
 
 ## Installation
 
-1. Copy the `ialhabbal` folder into your ComfyUI `custom_nodes` directory.
+1. In ComfyUI `custom_nodes` directory. Run CMD, then: git clone https://github.com/ialhabbal/ComfyUI-ialhabbal.git
 2. Restart ComfyUI.
 3. Search for any of the node names above in the node browser to add them to your canvas.
 
