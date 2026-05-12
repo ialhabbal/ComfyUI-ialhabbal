@@ -1,0 +1,15 @@
+[project]
+name = "ialhabbal"
+description = "Custom Nodes Suite To browse and load images and extract prompts form them"
+version = "1.0.0"
+license = { file = "LICENSE" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/ialhabbal/ialhabbal"
+
+[tool.comfy]
+PublisherId = "ialhabbal"
+DisplayName = "meta_prompt_extractor"
+Icon = "https://raw.githubusercontent.com/ialhabbal/meta_prompt_extractor/main/media/meta_prompt_extractor.png"
+includes = []

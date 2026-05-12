@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" class="compare-logo" role="img" aria-label="Compare">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#4CAF50"/>
+      <stop offset="1" stop-color="#007ACC"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#g)" />
+  <g transform="translate(32,32) scale(0.75)" fill="#fff">
+    <rect x="20" y="40" width="80" height="32" rx="6" />
+    <rect x="20" y="96" width="120" height="32" rx="6" />
+    <rect x="20" y="152" width="40" height="32" rx="6" />
+    <circle cx="188" cy="88" r="44" />
+  </g>
+</svg>
