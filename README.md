@@ -172,6 +172,23 @@ Point the node at any PNG, JPG, WebP, or JSON file and it outputs five things yo
 - **Drag and drop** — Drop files directly from your OS onto the node
 - **Persistent window** — Browser remembers size, position, folder, and settings
 
+## Screenshots
+
+### The Node
+![meta_prompt_extractor](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/mpe_the_node.png)
+
+### Browse Files Floating Window
+![meta_prompt_extractor](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/mpe_Browse_Files_floating_window.png)
+
+### Image Right-Click Functions
+![meta_prompt_extractor](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/mpe_image_right_click_functions.png)
+
+### Mask Editor Window
+![meta_prompt_extractor](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/mpe_mask_editor_window.png)
+
+### Full File Picker for Copy/Move Functions
+![meta_prompt_extractor](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/mpe_full_file_picker_for_copy_move_functions.png)
+
 ### How the Prompt Is Found
 
 1. Finds the sampler first as the anchor point
