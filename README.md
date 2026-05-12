@@ -338,6 +338,11 @@ Loads all images from a folder or accepts a batch from another node and outputs 
 
 Turns clean AI-generated portraits into images that look like they were shot on real film, edited in a darkroom, or simply lived-in and human. Combines classic photo effects with a full suite of face skin effects.
 
+### Screenshots
+<img src="https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/PhotoLab_New.png" width="600">
+<img src="https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/PhotoLab_New1.png" width="600">
+<img src="https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/PhotoLab_.png" width="600">
+
 ### Quick Start Settings
 
 | Setting | Value |
