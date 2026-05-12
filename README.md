@@ -421,6 +421,37 @@ Turns clean AI-generated portraits into images that look like they were shot on 
 
 A powerful image-saving node that gives you full control over *where*, *when*, and *how* your generated images are saved — with a clean, interactive UI.
 
+### Node
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it.png)
+
+### Compare off
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_compare_off.png)
+
+### Compare on without toggling
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_compare_on_without_toggling.png)
+
+### Compare on with toggling
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_compare_on_with_toggling.png)
+
+### Compare on with toggling
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_compare_on_with_toggling2.png)
+
+### Compare (vertical wipe left to right)
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_vertical_wipe_compare.png)
+
+### Browse & Set Save Path
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_browse_&_set_save_path.png)
+
+### Open Output Folder
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_open_output_folder.png)
+
+### Save History
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_save_history.png)
+
+### Favorite Folders
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_favorite_folders.png)
+![Save_It Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/save_it_favorite_folders1.png)
+
 ### Features
 
 - **One-click manual save** — save selected images only
