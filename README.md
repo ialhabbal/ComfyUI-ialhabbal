@@ -6,7 +6,7 @@ A comprehensive suite of ComfyUI custom nodes for image processing, prompt verif
 
 ## Suite Overview
 
-**ialhabbal** combines 7 powerful ComfyUI nodes into a single, unified package:
+**ComfyUI-ialhabbal** combines 7 powerful ComfyUI nodes into a single, unified package:
 
 1. **Prompt Verify** — Review and approve prompts before generation
 2. **Compare** — Side-by-side image comparison with interactive controls
@@ -44,6 +44,17 @@ When your workflow reaches the **Prompt Verify** node, execution pauses. The nod
 The node outputs two things:
 - **CONDITIONING** — a ready-to-use CLIP-encoded conditioning signal (only when a CLIP model is connected).
 - **STRING** — the final confirmed text, which you can pipe anywhere else in your workflow.
+
+## Screenshots
+
+### The Node
+![ComfyUI-Prompt-Verify Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/prompt_verify_the_node.png)
+
+### Simple Workflow
+![ComfyUI-Prompt-Verify simple workflow](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/prompt_verify_simple_workflow.png)
+
+### The Node in Action
+![ComfyUI-Prompt-Verify in action](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/prompt_verify_workflow.png)
 
 ### The Node's Interface
 
