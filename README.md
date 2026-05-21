@@ -15,6 +15,7 @@ A comprehensive suite of ComfyUI custom nodes for image processing, prompt verif
 5. **Loader for Batch Image Processing** — Load and process image batches
 6. **PhotoLab** — Film effects and advanced skin retouching for portraits
 7. **Save_It** — Advanced image saving with favorites, history, and compare modes
+8. **ialhabbal_VLLM** - Nodes for multimodals Qwen and Gemma.
 
 ---
 
@@ -32,6 +33,36 @@ Most nodes use standard ComfyUI libraries. **OcclusionMask** requires additional
 ```bash
 pip install insightface onnxruntime opencv-python numpy Pillow retina-face ultralytics segment-anything
 ```
+
+<details>
+<summary><strong>ialhabbal_VLLM</strong> — Qwen + Gemma multimodal nodes (local GGUF and HF models)</summary>
+
+This package now includes the `ialhabbal_vllm` node family for Qwen and Gemma multimodal workflows. The nodes can load both local GGUF models and HuggingFace models, giving you flexible options for local and remote model inference.
+
+- `ialhabbal_VLLM` — Qwen multimodal node using `transformers` and HuggingFace model checkpoints.
+- `ialhabbal_VLLM_Advanced` — advanced Qwen node with extra device, sampling, and generation controls.
+- `ialhabbal_VLLM_GGUF` — local GGUF inference node for Gemma-compatible models using `llama-cpp-python`.
+- `ialhabbal_VLLM_GGUF_Advanced` — advanced GGUF node with extra performance and configuration options.
+- `ialhabbal_VLLM_PromptEnhancer` — prompt enhancement node for Qwen-based VLLM workflows.
+- `ialhabbal_VLLM_GGUF_PromptEnhancer` — prompt enhancer for local GGUF / llama.cpp workflows.
+
+#### How They Work
+- `ialhabbal_VLLM` and `ialhabbal_VLLM_Advanced` are designed for Qwen multimodal models and load HF checkpoints through `transformers`.
+- `ialhabbal_VLLM_GGUF` and `ialhabbal_VLLM_GGUF_Advanced` support local Gemma GGUF models with `llama-cpp-python`, allowing direct local inference without relying only on HuggingFace downloads.
+- Both node families can handle image and text inputs and return structured multimodal responses into your ComfyUI workflow.
+- The prompt enhancer nodes help generate, refine, and format prompts for both the HF and GGUF VLLM pipelines.
+
+#### Local Gemma / llama.cpp Installation
+For Gemma GGUF models in ComfyUI, install `llama-cpp-python` with the `server` extra:
+
+```bash
+pip install --upgrade pip setuptools wheel
+pip install "llama-cpp-python[server]"
+```
+
+This installs the runtime support required for local llama.cpp-based GGUF inference. On Windows, ensure your Python environment has compatible build tools and an up-to-date `pip` if installation fails.
+
+</details>
 
 ---
 

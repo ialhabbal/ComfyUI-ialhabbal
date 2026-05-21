@@ -1,7 +1,14 @@
+import importlib.util
+import os
+import sys
 import traceback
 
-VERSION = "0.0.1"
+VERSION = "1.0.0"
 WEB_DIRECTORY = "./web"
+
+# Ensure local custom node files and helper modules are discoverable during package import.
+current_dir = os.path.dirname(__file__)
+sys.path.insert(0, current_dir)
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
@@ -60,4 +67,45 @@ except Exception as e:
     print(f"[ialhabbal] ERROR importing Save_It: {e}")
     traceback.print_exc()
 
-__all__ = ["VERSION", "WEB_DIRECTORY", "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+# VLLM nodes
+try:
+    from .ialhabbal_VLLM import ialhabbal_VLLM, ialhabbal_VLLM_Advanced
+    NODE_CLASS_MAPPINGS["ialhabbal_VLLM"] = ialhabbal_VLLM
+    NODE_DISPLAY_NAME_MAPPINGS["ialhabbal_VLLM"] = "ialhabbal VLLM"
+    NODE_CLASS_MAPPINGS["ialhabbal_VLLM_Advanced"] = ialhabbal_VLLM_Advanced
+    NODE_DISPLAY_NAME_MAPPINGS["ialhabbal_VLLM_Advanced"] = "ialhabbal VLLM Advanced"
+except Exception as e:
+    print(f"[ialhabbal] ERROR importing ialhabbal_VLLM nodes: {e}")
+    traceback.print_exc()
+
+try:
+    from .ialhabbal_VLLM_GGUF import ialhabbal_VLLM_GGUF, ialhabbal_VLLM_GGUF_Advanced
+    NODE_CLASS_MAPPINGS["ialhabbal_VLLM_GGUF"] = ialhabbal_VLLM_GGUF
+    NODE_DISPLAY_NAME_MAPPINGS["ialhabbal_VLLM_GGUF"] = "ialhabbal VLLM GGUF"
+    NODE_CLASS_MAPPINGS["ialhabbal_VLLM_GGUF_Advanced"] = ialhabbal_VLLM_GGUF_Advanced
+    NODE_DISPLAY_NAME_MAPPINGS["ialhabbal_VLLM_GGUF_Advanced"] = "ialhabbal VLLM GGUF Advanced"
+except Exception as e:
+    print(f"[ialhabbal] ERROR importing ialhabbal_VLLM_GGUF nodes: {e}")
+    traceback.print_exc()
+
+try:
+    from .ialhabbal_VLLM_PromptEnhancer import ialhabbal_VLLM_PromptEnhancer
+    NODE_CLASS_MAPPINGS["ialhabbal_VLLM_PromptEnhancer"] = ialhabbal_VLLM_PromptEnhancer
+    NODE_DISPLAY_NAME_MAPPINGS["ialhabbal_VLLM_PromptEnhancer"] = "ialhabbal VLLM Prompt Enhancer"
+except Exception as e:
+    print(f"[ialhabbal] ERROR importing ialhabbal_VLLM_PromptEnhancer: {e}")
+    traceback.print_exc()
+
+try:
+    from .ialhabbal_VLLM_GGUF_PromptEnhancer import ialhabbal_VLLM_GGUF_PromptEnhancer
+    NODE_CLASS_MAPPINGS["ialhabbal_VLLM_GGUF_PromptEnhancer"] = ialhabbal_VLLM_GGUF_PromptEnhancer
+except Exception as e:
+    print(f"[ialhabbal] ERROR importing ialhabbal_VLLM_GGUF_PromptEnhancer: {e}")
+    traceback.print_exc()
+
+__all__ = [
+    "VERSION",
+    "WEB_DIRECTORY",
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS"
+]
