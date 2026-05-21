@@ -1,6 +1,6 @@
 # ialhabbal — ComfyUI Suite
 
-A comprehensive suite of ComfyUI custom nodes for image processing, prompt verification, comparison, extraction, occlusion masking, batch loading, and advanced saving.
+A suite of ComfyUI custom nodes for image processing, image-vision, video-vision, prompt verification, comparison, extraction, occlusion masking, batch loading, local media browsing, image masking, advanced saving, and more..
 
 ---
 
@@ -590,4 +590,4 @@ MIT License
 
 Developed by [ialhabbal](https://github.com/ialhabbal)
 
-Suite combines 7 ComfyUI custom nodes with unified installation and documentation.
+Suite combines 8 ComfyUI custom nodes with unified installation and documentation.
