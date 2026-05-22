@@ -14,6 +14,7 @@ import json
 import os
 import re
 from pathlib import Path
+import inspect
 
 import torch
 from huggingface_hub import hf_hub_download, snapshot_download
@@ -166,6 +167,7 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
                 "repetition_penalty": ("FLOAT", {"default": 1.1, "min": 0.5, "max": 2.0}),
                 "english_output": ("BOOLEAN", {"default": False, "tooltip": "Force final output in English using translation prompt."}),
                 "device": (["auto", "cuda", "cpu", "mps"], {"default": "auto", "tooltip": "Select device; auto prefers GPU when available."}),
+                "keep_model_loaded": ("BOOLEAN", {"default": True, "tooltip": "Keeps the model resident in VRAM/RAM after the run so the next prompt skips loading."}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2**32 - 1}),
             }
         }
@@ -287,7 +289,10 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
             threads = max(os.cpu_count() or 1, 1)
         is_gemma = "gemma" in model_name.lower() or (model_cfg.get("author") and "google" in model_cfg.get("author").lower())
         chat_format = "gemma" if is_gemma else "qwen"
-        kwargs = {
+        # record gemma flag for later use in invocation
+        self.is_gemma = is_gemma
+
+        llm_kwargs = {
             "model_path": str(resolved),
             "n_ctx": context_length,
             "n_gpu_layers": auto_gpu_layers,
@@ -296,8 +301,137 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
             "verbose": False,
             "chat_format": chat_format,
         }
-        self.llm = Llama(**kwargs)
-        self.current_signature = signature
+
+        # Try to locate an mmproj file near the model to enable multimodal chat handlers
+        mmproj_path = None
+        try:
+            for p in resolved.parent.rglob("mmproj*.gguf"):
+                mmproj_path = p
+                break
+        except Exception:
+            mmproj_path = None
+
+        if mmproj_path is not None and mmproj_path.exists():
+            handler_cls = None
+            if is_gemma:
+                if "gemma-4" in model_name.lower() or "gemma4" in model_name.lower():
+                    try:
+                        from llama_cpp.llama_chat_format import Gemma4ChatHandler
+
+                        handler_cls = Gemma4ChatHandler
+                    except Exception:
+                        try:
+                            from llama_cpp.llama_chat_format import Gemma4VLChatHandler
+
+                            handler_cls = Gemma4VLChatHandler
+                        except Exception:
+                            handler_cls = None
+                if handler_cls is None:
+                    try:
+                        from llama_cpp.llama_chat_format import Gemma3ChatHandler
+
+                        handler_cls = Gemma3ChatHandler
+                    except Exception:
+                        try:
+                            from llama_cpp.llama_chat_format import Gemma3VLChatHandler
+
+                            handler_cls = Gemma3VLChatHandler
+                        except Exception:
+                            try:
+                                from llama_cpp.llama_chat_format import NanoGemmaChatHandler
+
+                                handler_cls = NanoGemmaChatHandler
+                            except Exception:
+                                try:
+                                    from llama_cpp.llama_chat_format import PaliGemmaChatHandler
+
+                                    handler_cls = PaliGemmaChatHandler
+                                except Exception:
+                                    handler_cls = None
+
+                if handler_cls is None:
+                    print(
+                        "[ialhabbal_VLLM] Info: Gemma model selected but no Gemma-specific ChatHandler found in llama_cpp. Using fallback Qwen/VL chat handler."
+                    )
+
+            if handler_cls is None:
+                try:
+                    from llama_cpp.llama_chat_format import Qwen3VLChatHandler
+
+                    handler_cls = Qwen3VLChatHandler
+                except Exception:
+                    try:
+                        from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+
+                        handler_cls = Qwen25VLChatHandler
+                    except Exception:
+                        handler_cls = None
+
+            if handler_cls is not None:
+                mmproj_kwargs = {
+                    "clip_model_path": str(mmproj_path),
+                    "image_max_tokens": int(model_cfg.get("image_max_tokens", 4096)),
+                    "force_reasoning": False,
+                    "verbose": False,
+                }
+
+                try:
+                    sig = inspect.signature(getattr(handler_cls, "__init__", handler_cls))
+                except Exception:
+                    sig = None
+
+                if sig is None:
+                    filtered = {k: v for k, v in mmproj_kwargs.items()}
+                else:
+                    params = list(sig.parameters.values())
+                    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
+                        whitelist = {"clip_model_path", "image_max_tokens", "verbose", "force_reasoning"}
+                        filtered = {k: v for k, v in mmproj_kwargs.items() if k in whitelist}
+                    else:
+                        allowed = {p.name for p in params if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)}
+                        filtered = {k: v for k, v in mmproj_kwargs.items() if k in allowed}
+
+                try:
+                    handler = handler_cls(**filtered)
+                except TypeError as te:
+                    msg = str(te)
+                    bad_keys = []
+                    try:
+                        for key in list(filtered.keys()):
+                            if f"'{key}'" in msg or f'\"{key}\"' in msg or key in msg:
+                                bad_keys.append(key)
+                    except Exception:
+                        bad_keys = []
+
+                    for k in bad_keys:
+                        filtered.pop(k, None)
+                    try:
+                        handler = handler_cls(**filtered)
+                    except Exception:
+                        handler = None
+
+                if handler is not None:
+                    llm_kwargs["chat_handler"] = handler
+                    llm_kwargs["image_min_tokens"] = 1024
+                    llm_kwargs["image_max_tokens"] = int(model_cfg.get("image_max_tokens", 4096))
+
+        # Try to instantiate Llama; if it fails due to unexpected kwargs, retry without chat/image args
+        try:
+            self.llm = Llama(**llm_kwargs)
+            self.current_signature = signature
+        except Exception as exc:
+            print(f"[ialhabbal_VLLM] Llama() failed with kwargs: {list(llm_kwargs.keys())}")
+            print(f"[ialhabbal_VLLM] Llama() raised: {exc}")
+            if "chat_handler" in llm_kwargs:
+                print("[ialhabbal_VLLM] Retrying without chat_handler/image args to allow model-only load.")
+                fallback_kwargs = {k: v for k, v in llm_kwargs.items() if k not in {"chat_handler", "image_min_tokens", "image_max_tokens"}}
+                try:
+                    self.llm = Llama(**fallback_kwargs)
+                    self.current_signature = signature
+                except Exception as exc2:
+                    raise RuntimeError(f"[ialhabbal_VLLM] Failed to instantiate Llama for model: {resolved} -> {exc2}") from exc2
+            else:
+                raise RuntimeError(f"[ialhabbal_VLLM] Failed to instantiate Llama for model: {resolved} -> {exc}") from exc
 
     def _invoke_llama(
         self,
@@ -321,6 +455,8 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
             )
 
         def _call(system: str, user: str, temp: float, seed_val: int) -> str:
+            # Use stop tokens appropriate for Gemma vs Qwen chat formats
+            stop_tokens = ["<end_of_turn>", "<eos>"] if getattr(self, "is_gemma", False) else ["<|im_end|>", "<|im_start|>"]
             response = self.llm.create_chat_completion(
                 messages=[
                     {"role": "system", "content": system},
@@ -331,12 +467,19 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
                 top_p=top_p,
                 repeat_penalty=repetition_penalty,
                 seed=seed_val,
+                stop=stop_tokens,
             )
             if not response or "choices" not in response or not response["choices"]:
                 raise RuntimeError("[ialhabbal_VLLM] llama_cpp returned empty response")
             return (response["choices"][0].get("message", {}).get("content", "") or "").strip()
 
         raw = _call(system_prompt, user_prompt, float(temperature), int(seed))
+        # Debug: if gemma model produced no change, emit a short diagnostic to logs
+        try:
+            if getattr(self, "is_gemma", False) and raw and raw.strip() == user_prompt.strip():
+                print(f"[ialhabbal_VLLM] Debug: Gemma model returned identical text to user_prompt (no enhancement) for model={model_name}")
+        except Exception:
+            pass
         cleaned = clean_model_output(raw, OutputCleanConfig(mode="prompt"))
 
         # If the model only emitted thinking/planning (common with some Qwen variants),
@@ -371,6 +514,7 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
         repetition_penalty,
         english_output,
         device,
+        keep_model_loaded,
         seed,
     ):
         style_entry = self.styles.get(preset_system_prompt, {})
@@ -385,33 +529,37 @@ class ialhabbal_VLLM_GGUF_PromptEnhancer:
         user_prompt = prompt_text.strip() or "Describe a scene vividly."
         merged_prompt = user_prompt
         self._load_model(model_name, device)
-        enhanced = self._invoke_llama(
-            system_prompt=system_prompt,
-            user_prompt=merged_prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            repetition_penalty=repetition_penalty,
-            seed=seed,
-        )
-        if english_output:
-            translated = self._invoke_llama(
-                system_prompt=(
-                    PROMPT_CONFIG.get("translation_prompt")
-                    or "Return a single English paragraph (150-300 words). No prefixes, bullets, JSON, or <think>. "
-                    "Cover subject, environment, lighting, camera settings, composition, color/texture, and style. Output only the prompt."
-                ),
-                user_prompt=enhanced,
+        try:
+            enhanced = self._invoke_llama(
+                system_prompt=system_prompt,
+                user_prompt=merged_prompt,
                 max_tokens=max_tokens,
-                temperature=0.3,
-                top_p=0.95,
-                repetition_penalty=1.05,
-                seed=seed + 1,
+                temperature=temperature,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                seed=seed,
             )
-            final = clean_model_output(translated, OutputCleanConfig(mode="prompt")) or translated.strip()
-        else:
-            final = clean_model_output(enhanced, OutputCleanConfig(mode="prompt")) or enhanced.strip()
-        return (final,)
+            if english_output:
+                translated = self._invoke_llama(
+                    system_prompt=(
+                        PROMPT_CONFIG.get("translation_prompt")
+                        or "Return a single English paragraph (150-300 words). No prefixes, bullets, JSON, or <think>. "
+                        "Cover subject, environment, lighting, camera settings, composition, color/texture, and style. Output only the prompt."
+                    ),
+                    user_prompt=enhanced,
+                    max_tokens=max_tokens,
+                    temperature=0.3,
+                    top_p=0.95,
+                    repetition_penalty=1.05,
+                    seed=seed + 1,
+                )
+                final = clean_model_output(translated, OutputCleanConfig(mode="prompt")) or translated.strip()
+            else:
+                final = clean_model_output(enhanced, OutputCleanConfig(mode="prompt")) or enhanced.strip()
+            return (final,)
+        finally:
+            if not keep_model_loaded:
+                self.clear()
 
     @staticmethod
     def _is_english(text):
