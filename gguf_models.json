@@ -18,6 +18,56 @@
         "pool_size": 4194304
       }
     },
+    "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P": {
+      "author": "Google",
+      "mmproj_file": "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P/mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf",
+      "model_files": [
+        "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf"
+      ],
+      "load_local_only": true,
+      "defaults": {
+        "context_length": 8192,
+		"image_max_tokens": 8192,
+        "n_batch": 512,
+        "gpu_layers": -1,
+        "top_k": 0,
+        "pool_size": 4194304
+      }
+    },
+    "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0": {
+      "author": "Qwen",
+      "mmproj_file": "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/mmproj-F32.gguf",
+      "model_files": [
+        "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0.gguf"
+      ],
+      "load_local_only": true,
+      "defaults": {
+        "context_length": 8192,
+        "image_min_tokens": 1024,
+		"image_max_tokens": 4096,
+        "n_batch": 512,
+        "gpu_layers": -1,
+        "top_k": 0,
+        "pool_size": 4194304
+      }
+    },
+    "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0": {
+      "author": "Qwen",
+      "mmproj_file": "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0/mmproj-F32.gguf",
+      "model_files": [
+        "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf"
+      ],
+      "load_local_only": true,
+      "defaults": {
+        "context_length": 8192,
+        "image_min_tokens": 1024,
+		"image_max_tokens": 4096,
+        "n_batch": 512,
+        "gpu_layers": -1,
+        "top_k": 0,
+        "pool_size": 4194304
+      }
+    },
     "Qwen2.5-VL-7B-Instruct-abliterated.Q8_0": {
       "author": "Qwen",
       "mmproj_file": "Qwen2.5-VL-7B-Instruct-abliterated.Q8_0/Qwen2.5-VL-7B-Instruct-abliterated.mmproj-f16.gguf",
@@ -116,6 +166,56 @@
         "context_length": 8192,
 		"image_min_tokens": 1024,
         "image_max_tokens": 4096,
+        "n_batch": 512,
+        "gpu_layers": -1,
+        "top_k": 0,
+        "pool_size": 4194304
+      }
+    },
+    "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P": {
+      "author": "Google",
+      "mmproj_file": "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P/mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf",
+      "model_files": [
+        "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf"
+      ],
+      "load_local_only": true,
+      "defaults": {
+        "context_length": 8192,
+		"image_max_tokens": 8192,
+        "n_batch": 512,
+        "gpu_layers": -1,
+        "top_k": 0,
+        "pool_size": 4194304
+      }
+    },
+    "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0": {
+      "author": "Qwen",
+      "mmproj_file": "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/mmproj-F32.gguf",
+      "model_files": [
+        "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0.gguf"
+      ],
+      "load_local_only": true,
+      "defaults": {
+        "context_length": 8192,
+        "image_min_tokens": 1024,
+		"image_max_tokens": 4096,
+        "n_batch": 512,
+        "gpu_layers": -1,
+        "top_k": 0,
+        "pool_size": 4194304
+      }
+    },
+    "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0": {
+      "author": "Qwen",
+      "mmproj_file": "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0/mmproj-F32.gguf",
+      "model_files": [
+        "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf"
+      ],
+      "load_local_only": true,
+      "defaults": {
+        "context_length": 8192,
+        "image_min_tokens": 1024,
+		"image_max_tokens": 4096,
         "n_batch": 512,
         "gpu_layers": -1,
         "top_k": 0,

@@ -46,6 +46,18 @@ This package now includes the `ialhabbal_vllm` node family for Qwen and Gemma mu
 - `ialhabbal_VLLM_PromptEnhancer` — prompt enhancement node for Qwen and Gemma VLLM workflows.
 - `ialhabbal_VLLM_GGUF_PromptEnhancer` — prompt enhancer for local Qwen and Gemma GGUF / llama.cpp workflows.
 
+## Screenshots
+
+### Prompt Enhancer (QWEN and GEMMA GGUFs)
+![ComfyUI-Prompt-Verify Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_promptenhancer.png)
+
+### Prompt Ehnance, Prompt from Image, Prompt from Video (QWEN and GEMMA GGUFs)
+![ComfyUI-Prompt-Verify simple workflow](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_t2t.png)
+
+![ComfyUI-Prompt-Verify in action](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_i2t.png)
+
+![ComfyUI-Prompt-Verify in action](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_v2t.png)
+
 #### How They Work
 - `ialhabbal_VLLM` and `ialhabbal_VLLM_Advanced` are designed for Qwen and Gemma multimodal models and load HF checkpoints through `transformers`.
 - `ialhabbal_VLLM_GGUF` and `ialhabbal_VLLM_GGUF_Advanced` support local Qwen and Gemma GGUF models with `llama-cpp-python`, allowing direct local inference without relying only on HuggingFace downloads.
