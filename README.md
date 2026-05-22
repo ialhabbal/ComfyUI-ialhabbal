@@ -51,7 +51,7 @@ This package now includes the `ialhabbal_vllm` node family for Qwen and Gemma mu
 ### Prompt Enhancer (QWEN and GEMMA GGUFs)
 ![ComfyUI-Prompt-Verify Node](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_promptenhancer.png)
 
-### Prompt Ehnance, Prompt from Image, Prompt from Video (QWEN and GEMMA GGUFs)
+### Prompt Enhancer, Prompt from Image, Prompt from Video (QWEN and GEMMA GGUFs)
 ![ComfyUI-Prompt-Verify simple workflow](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_t2t.png)
 
 ![ComfyUI-Prompt-Verify in action](https://raw.githubusercontent.com/ialhabbal/ComfyUI-ialhabbal/main/media/ialhabbal_vllm_i2t.png)
