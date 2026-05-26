@@ -6,7 +6,7 @@ A suite of ComfyUI custom nodes for image processing, image-vision, video-vision
 
 ## Suite Overview
 
-**ComfyUI-ialhabbal** combines 7 powerful ComfyUI nodes into a single, unified package:
+**ComfyUI-ialhabbal** combines 8  powerful ComfyUI nodes into a single, unified package:
 
 1. **Prompt Verify** — Review and approve prompts before generation
 2. **Compare** — Side-by-side image comparison with interactive controls
