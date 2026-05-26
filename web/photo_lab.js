@@ -311,23 +311,23 @@ app.registerExtension({
             "pixelate_strength",
             "grain_strength",
             "vignette_strength",
-        ], true);
+        ], false);
 
         addCollapsibleWidgetSection(node, "color_inputs", "Color", [
             "color_grade",
             "color_grade_strength",
             "saturation",
-        ], true);
+        ], false);
 
         addCollapsibleWidgetSection(node, "blur_inputs", "Blur", [
             "blur_type",
             "blur_strength",
-        ], true);
+        ], false);
 
         addCollapsibleWidgetSection(node, "lighting_inputs", "Lighting", [
             "lighting_match_mode",
             "lighting_match_strength",
-        ], true);
+        ], false);
 
         addCollapsibleWidgetSection(node, "mask_inputs", "Mask", [
             "mask_mode",
@@ -346,10 +346,10 @@ app.registerExtension({
             "acne_opacity",
             "freckles_opacity",
             "skin_texture_opacity",
-        ], true);
+        ], false);
 
-        // ── Section 1: Global Photo Effects (starts OPEN) ────────────────────────
-        addCollapsibleSection(node, "global", "Global Photo Effects", GLOBAL_PRESETS, true);
+        // ── Section 1: Global Photo Effects (starts COLLAPSED) ────────────────
+        addCollapsibleSection(node, "global", "Global Photo Effects", GLOBAL_PRESETS, false);
 
         // ── Section 2: Lighting Match (starts CLOSED) ───────────────────────────
         const lightingPresets = [
@@ -380,7 +380,7 @@ app.registerExtension({
 
             const all = loadUserPresets();
 
-            let open = true;
+            let open = false;
             const header = node.addWidget("button",
                 `${open ? "▼" : "▶"} My Presets (${all.length})`, null,
                 () => {

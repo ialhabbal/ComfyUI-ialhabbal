@@ -190,7 +190,7 @@
     },
     "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0": {
       "author": "Qwen",
-      "mmproj_file": "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/mmproj-F32.gguf",
+      "mmproj_file": "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.mmproj-F32.gguf",
       "model_files": [
         "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0.gguf"
       ],
@@ -207,7 +207,7 @@
     },
     "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0": {
       "author": "Qwen",
-      "mmproj_file": "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0/mmproj-F32.gguf",
+      "mmproj_file": "Huihui-Qwen3-VL-2B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.mmproj-F32.gguf",
       "model_files": [
         "Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0/Huihui-Qwen3-VL-4B-Instruct-abliterated-Q8_0.gguf"
       ],
