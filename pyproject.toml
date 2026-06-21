@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI-ialhabbal"
 description = "A comprehensive suite of ComfyUI custom nodes for image processing, prompt verification, comparison, extraction, occlusion masking, batch loading, and advanced saving."
-version = "1.5.2"
+version = "1.6.0"
 license = { file = "LICENSE" }
 dependencies = [
     "transformers",

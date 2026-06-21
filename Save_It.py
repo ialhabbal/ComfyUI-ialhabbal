@@ -59,10 +59,11 @@ def resolve_output_dir(filename_prefix, base_dir):
     return out_dir, base_name, out_subfolder
 
 
-def next_available_path(out_dir, base_name, use_timestamp=False, ext=".png"):
+def next_available_path(out_dir, base_name, use_timestamp=False, ext=".png", fixed_ts=None):
     """Find the next available filename using counter or timestamp."""
     if use_timestamp:
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        # If a fixed timestamp was provided (from a Save All operation), reuse it.
+        ts = fixed_ts if fixed_ts else datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"{base_name}_{ts}{ext}" if base_name else f"{ts}{ext}"
         dst_path = os.path.join(out_dir, filename)
         # If somehow same second, append counter
@@ -164,7 +165,8 @@ async def save_it_handler(request):
         out_dir, base_name, out_subfolder = resolve_output_dir(filename_prefix, out_base_dir)
 
         _, ext = get_pil_format_and_ext(fmt)
-        dst_path, new_filename = next_available_path(out_dir, base_name, use_timestamp, ext)
+        fixed_ts = data.get("fixed_ts", None)
+        dst_path, new_filename = next_available_path(out_dir, base_name, use_timestamp, ext, fixed_ts=fixed_ts)
 
         # Open the source image
         img = Image.open(src_path)

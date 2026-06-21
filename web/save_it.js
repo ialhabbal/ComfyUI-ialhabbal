@@ -444,14 +444,128 @@ app.registerExtension({
                 }
             }
 
+            function resolveImage(candidate) {
+                if (!candidate) return null;
+                if (candidate instanceof Image) return candidate;
+                if (candidate instanceof HTMLImageElement) return candidate;
+                if (typeof candidate.src === "string" && candidate.src) return candidate;
+                if (candidate.img && typeof candidate.img.src === "string" && candidate.img.src) return candidate.img;
+                return null;
+            }
+
             async function doSave() {
-                const img = self.currentImageA || (self.imgs && self.imgs.length > 0 ? self.imgs[0] : null);
+                const idx = Number.isInteger(self.imageIndex) ? self.imageIndex : parseInt(self.imageIndex, 10);
+                const hasValidIdx = Number.isInteger(idx) && self.imgs && idx >= 0 && idx < self.imgs.length;
+                const displayed = hasValidIdx ? resolveImage(self.imgs[idx]) : null;
+                const currentA = resolveImage(self.currentImageA);
+                const currentB = resolveImage(self.currentImageB);
+                const firstImg = Array.isArray(self.imgs) && self.imgs.length > 0 ? resolveImage(self.imgs[0]) : null;
+
+                const img = displayed || currentA || currentB || firstImg || null;
+                const inspectedKeys = Object.keys(self).filter((k) => /image|img/i.test(k));
+                const debugState = {
+                    imageIndexRaw: self.imageIndex,
+                    imageIndexParsed: hasValidIdx ? idx : null,
+                    displayedSrc: displayed?.src,
+                    currentImageA: currentA?.src,
+                    currentImageB: currentB?.src,
+                    firstImgSrc: firstImg?.src,
+                    imgsLength: self.imgs?.length,
+                    inspectedKeys,
+                    chosenSrc: img?.src,
+                };
+                console.log("[Save_It] Save Image debug", debugState);
+
                 if (!img) {
                     showToast("No image to save. Please run the workflow first.", true);
                     return;
                 }
                 await doSaveImgs([img]);
             }
+
+            // ── Save Image button ──────────────────────────────────────────
+            const saveBtn = this.addWidget("button", "💾  Save Image", null, async () => {
+                if (isAutoSave() && !isCmpOn()) return;
+                await doSave();
+            });
+            saveBtn.serialize = false;
+
+            // ── Save All Images button (saves every image in batch order) ──
+            const saveAllBtn = this.addWidget("button", "💾  Save All Images", null, async () => {
+                if (isAutoSave() && !isCmpOn()) return;
+
+                // Collect images in batch order from self.imgs if available.
+                const imgsToSave = (self.imgs && self.imgs.length > 0) ? self.imgs.slice() : [];
+                if (imgsToSave.length === 0) {
+                    // If compare mode is on, try to collect compare images
+                    if (self._cmpImg1) imgsToSave.push(self._cmpImg1);
+                    if (self._cmpImg2) imgsToSave.push(self._cmpImg2);
+                }
+                if (imgsToSave.length === 0) {
+                    showToast("No images to save. Please run the workflow first.", true);
+                    return;
+                }
+
+                // If timestamp mode is enabled, request a single timestamp from
+                // the backend by passing a special save call. The Python side
+                // already accepts a timestamp via next_available_path fixed_ts
+                // when Save All is handling multiple images through the same
+                // API call. To keep changes minimal, we'll reuse doSaveImgs but
+                // perform sequential saves while reusing a single generated
+                // timestamp by asking the server to echo one filename.
+
+                const use_timestamp = getTimestamp();
+                let fixed_ts = null;
+                if (use_timestamp) {
+                    // Generate a timestamp client-side in the same format used by Python
+                    // (YYYY-MM-DD_HH-MM-SS) so filenames share the same ts across saves.
+                    const now = new Date();
+                    const pad = (n) => String(n).padStart(2, '0');
+                    fixed_ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+                }
+
+                // Build per-image request bodies but include fixed_ts when set
+                for (let i = 0; i < imgsToSave.length; i++) {
+                    const img = imgsToSave[i];
+                    try {
+                        const url = new URL(img.src, window.location.origin);
+                        const filename = url.searchParams.get("filename");
+                        const subfolder = url.searchParams.get("subfolder") || "";
+                        const type = url.searchParams.get("type") || "output";
+
+                        if (!filename) continue;
+
+                        const filename_prefix = getPrefix();
+                        const format = getFormat();
+                        const quality = getQuality();
+
+                        const body = { filename, subfolder, type, filename_prefix, format, quality, use_timestamp };
+                        if (fixed_ts) body.fixed_ts = fixed_ts;
+
+                        const response = await api.fetchApi("/save_it/save", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(body)
+                        });
+
+                        if (response.ok) {
+                            const msg = await response.text();
+                            const savedPath = msg.replace("Saved to ", "");
+                            const savedFilename = savedPath.split(/[\\\/]/).pop();
+                            addToHistory({ filename: savedFilename, path: savedPath, time: new Date().toLocaleString() });
+                            showToast(`✅ Saved: ${savedFilename}`);
+                        } else {
+                            const err = await response.text();
+                            showToast(`❌ Save failed: ${err}`, true);
+                            break;
+                        }
+                    } catch (e) {
+                        showToast(`❌ Error: ${e.message}`, true);
+                        break;
+                    }
+                }
+            });
+            saveAllBtn.serialize = false;
 
             // ── Browse & Set Path button ───────────────────────────────────
             const browseBtn = this.addWidget("button", "📁  Browse & Set Save Path", null, async () => {
@@ -589,13 +703,6 @@ app.registerExtension({
                     if (attempts >= 6) clearInterval(tid);
                 }, 100);
             }
-
-            // ── Save Image button ──────────────────────────────────────────
-            const saveBtn = this.addWidget("button", "💾  Save Image", null, async () => {
-                if (isAutoSave() && !isCmpOn()) return;
-                await doSave();
-            });
-            saveBtn.serialize = false;
 
             // ── Open Folder button ─────────────────────────────────────────
             const folderBtn = this.addWidget("button", "📂  Open Output Folder", null, async () => {
@@ -799,16 +906,25 @@ app.registerExtension({
                     _origOnExecuted?.call(this, output);
                     try {
                         if (output?.images && output.images.length > 0) {
-                            const d = output.images[0];
-                            const url = `/view?filename=${encodeURIComponent(d.filename)}&type=${encodeURIComponent(d.type)}&subfolder=${encodeURIComponent(d.subfolder || "")}&t=${Date.now()}`;
-                            const img = new Image();
-                            img.crossOrigin = "anonymous";
-                            img.onload = () => {
-                                this.currentImageA = img;
-                                this.imgs = [img];
-                                app.graph.setDirtyCanvas(true, true);
-                            };
-                            img.src = url;
+                            this.imgs = new Array(output.images.length);
+                            output.images.forEach((d, idx) => {
+                                const url = `/view?filename=${encodeURIComponent(d.filename)}&type=${encodeURIComponent(d.type)}&subfolder=${encodeURIComponent(d.subfolder || "")}&t=${Date.now()}`;
+                                const img = new Image();
+                                img.crossOrigin = "anonymous";
+                                // Preserve the image slot immediately so thumbnail selection
+                                // can resolve the intended image even before the browser has
+                                // finished loading the pixel data.
+                                this.imgs[idx] = img;
+                                img.onload = () => {
+                                    if (Number.isInteger(this.imageIndex) && this.imageIndex === idx) {
+                                        this.currentImageA = img;
+                                    } else if (idx === 0 && !Number.isInteger(this.imageIndex)) {
+                                        this.currentImageA = img;
+                                    }
+                                    app.graph.setDirtyCanvas(true, true);
+                                };
+                                img.src = url;
+                            });
                         } else {
                             if (this.imgs && this.imgs.length > 0) this.currentImageA = this.imgs[0];
                         }

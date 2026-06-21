@@ -12,7 +12,7 @@ import server
 # PIL / numpy (standard in ComfyUI)
 try:
     import numpy as np
-    from PIL import Image
+    from PIL import Image, ImageOps
     from PIL.PngImagePlugin import PngInfo
     IMAGE_SUPPORT = True
 except ImportError:
@@ -926,11 +926,12 @@ def load_image_as_tensor(file_path):
         return None
 
     try:
-        img = Image.open(file_path)
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
+        with Image.open(file_path) as img:
+            img = ImageOps.exif_transpose(img)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img_array = np.array(img).astype(np.float32) / 255.0
 
-        img_array = np.array(img).astype(np.float32) / 255.0
         img_tensor = torch.from_numpy(img_array).unsqueeze(0)
         return img_tensor
     except Exception as e:
@@ -946,6 +947,7 @@ def _placeholder_tensor():
 def _placeholder_mask():
     """Return an empty (all-black) 1x128x128 mask tensor."""
     return torch.zeros((1, 128, 128), dtype=torch.float32)
+
 
 def _load_mask_for_image(image_path):
     """
@@ -1504,6 +1506,20 @@ class MetaPromptExtractor:
                         "even if conditioning inputs are connected."
                     ),
                 }),
+                "batch_folder": ("STRING", {
+                    "default": "",
+                    "tooltip": (
+                        "Absolute or relative path to a folder containing a batch of images.\n"
+                        "When set, the node will attempt to load and process all supported images in that folder."
+                    ),
+                }),
+                "batch_file_list": ("STRING", {
+                    "default": "",
+                    "tooltip": (
+                        "JSON array (string) of file paths to use as an explicit batch.\n"
+                        "If set, these exact files will be loaded and used instead of enumerating a folder."
+                    ),
+                }),
             },
             "hidden": {
                 "unique_id":     "UNIQUE_ID",
@@ -1517,8 +1533,9 @@ class MetaPromptExtractor:
         "Extract positive and negative prompts from ComfyUI images "
         "or workflow JSON files stored anywhere on disk."
     )
-    RETURN_TYPES  = ("STRING", "STRING", "IMAGE", "MASK", "STRING")
-    RETURN_NAMES  = ("positive_prompt", "negative_prompt", "image", "mask", "path")
+    RETURN_TYPES  = ("STRING", "STRING", "IMAGE", "MASK", "STRING", "INT", "INT", "STRING")
+    RETURN_NAMES  = ("positive_prompt", "negative_prompt", "image", "mask", "path", "width", "height", "resolution")
+    OUTPUT_IS_LIST = (False, False, True, False, False, False, False, False)
     FUNCTION      = "extract"
     OUTPUT_NODE   = False
 
@@ -1528,7 +1545,7 @@ class MetaPromptExtractor:
 
     def extract(self, image="", conditioning=None, conditioning_negative=None,
                 use_conditioning=False, unique_id=None,
-                extra_pnginfo=None, prompt=None, **kwargs):
+                extra_pnginfo=None, prompt=None, batch_folder="", **kwargs):
         positive_prompt = ""
         negative_prompt = ""
         image_tensor    = None
@@ -1542,7 +1559,7 @@ class MetaPromptExtractor:
                               or conditioning_negative is not None)
         use_cond_active = bool(use_conditioning) and any_cond_connected
 
-        # ── Step 1: File-based extraction ──────────────────────────────────────
+        # ── Step 1: File-based extraction (single file or batch folder) ──────
         # Always run so we always have a valid image tensor to display/output.
         # The text results are only used when conditioning is NOT active.
         file_path = (image or "").strip()
@@ -1563,7 +1580,121 @@ class MetaPromptExtractor:
 
         file_positive = ""
         file_negative = ""
-        if resolved and not use_cond_active:
+        image_tensor = None
+
+        # If a batch folder is provided, prefer it over a single file path
+        batch_folder_path = (batch_folder or "").strip()
+        batch_files = None
+        # Support explicit list of files passed from the JS UI (JSON-encoded string)
+        batch_file_list_raw = (kwargs.get('batch_file_list') or "").strip() if kwargs is not None else ""
+        if batch_file_list_raw:
+            try:
+                parsed_list = json.loads(batch_file_list_raw)
+                if isinstance(parsed_list, list) and parsed_list:
+                    # Resolve relative paths similar to folder resolution
+                    resolved_list = []
+                    for item in parsed_list:
+                        if not isinstance(item, str):
+                            continue
+                        itm = item.strip()
+                        if not itm:
+                            continue
+                        if os.path.isabs(itm) and os.path.isfile(itm):
+                            resolved_list.append(os.path.normpath(itm))
+                        else:
+                            # Try input/output/temp directories
+                            for base in (folder_paths.get_input_directory(),
+                                         folder_paths.get_output_directory(),
+                                         folder_paths.get_temp_directory()):
+                                candidate = os.path.join(base, itm)
+                                if os.path.isfile(candidate):
+                                    resolved_list.append(os.path.normpath(candidate))
+                                    break
+                    if resolved_list:
+                        batch_files = resolved_list
+                        print(f"{TAG} Received explicit batch_file_list with {len(batch_files)} files")
+            except Exception as e:
+                print(f"{TAG} Warning: failed to parse batch_file_list: {e}")
+        if batch_folder_path:
+            # Resolve folder similarly to files
+            resolved_folder = None
+            if os.path.isabs(batch_folder_path) and os.path.isdir(batch_folder_path):
+                resolved_folder = batch_folder_path
+            else:
+                for base in (folder_paths.get_input_directory(),
+                             folder_paths.get_output_directory(),
+                             folder_paths.get_temp_directory()):
+                    candidate = os.path.join(base, batch_folder_path)
+                    if os.path.isdir(candidate):
+                        resolved_folder = candidate
+                        break
+
+            if resolved_folder and not use_cond_active:
+                # Gather supported files
+                SUPPORTED = {".png", ".jpg", ".jpeg", ".webp", ".json"}
+                try:
+                    all_names = sorted(os.listdir(resolved_folder))
+                except Exception:
+                    all_names = []
+                files = []
+                for name in all_names:
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext in SUPPORTED:
+                        files.append(os.path.join(resolved_folder, name))
+
+                if files:
+                    batch_files = files
+
+        if batch_files and not use_cond_active:
+            # Process batch: collect tensors and prompts
+            tensors = []
+            positives = []
+            negatives = []
+            total_files = len(batch_files)
+            loaded_count = 0
+            failed = 0
+            for fp in batch_files:
+                try:
+                    ext = os.path.splitext(fp)[1].lower()
+                    p_data = None
+                    w_data = None
+                    if ext == ".png":
+                        p_data, w_data = extract_metadata_from_png(fp)
+                        t = load_image_as_tensor(fp)
+                    elif ext in (".jpg", ".jpeg", ".webp"):
+                        p_data, w_data = extract_metadata_from_jpeg(fp)
+                        t = load_image_as_tensor(fp)
+                    elif ext == ".json":
+                        p_data, w_data = extract_metadata_from_json(fp)
+                        t = None
+                    else:
+                        t = None
+
+                    if t is None:
+                        t = _placeholder_tensor()
+
+                    tensors.append(t)
+                    loaded_count += 1
+
+                    if p_data or w_data:
+                        parsed = parse_workflow_for_prompts(p_data, w_data)
+                        pos = parsed.get("positive_prompt") or ""
+                        neg = parsed.get("negative_prompt") or ""
+                        positives.append(pos)
+                        negatives.append(neg)
+                except Exception:
+                    failed += 1
+                    print(f"{TAG} Warning: failed to process batch file: {fp}")
+                    continue
+
+            # Build a list of individual image tensors for downstream nodes.
+            image_tensor = [t if t.ndim == 4 else t.unsqueeze(0) for t in tensors] if tensors else [_placeholder_tensor()]
+            file_positive = "\n---\n".join([p for p in positives if p])
+            file_negative = "\n---\n".join([n for n in negatives if n])
+            # set resolved to first file so preview & metadata behave as expected
+            resolved = batch_files[0] if batch_files else resolved_folder
+            print(f"{TAG} Batch processing complete: discovered={total_files}, loaded={loaded_count}, failed={failed}")
+        elif resolved and not use_cond_active:
             ext = os.path.splitext(resolved)[1].lower()
             prompt_data  = None
             workflow_raw = None
@@ -1581,6 +1712,7 @@ class MetaPromptExtractor:
                 parsed        = parse_workflow_for_prompts(prompt_data, workflow_raw)
                 file_positive = parsed.get("positive_prompt") or ""
                 file_negative = parsed.get("negative_prompt") or ""
+            # image_tensor already set above when loading images
         else:
             resolved = None
 
@@ -1657,17 +1789,55 @@ class MetaPromptExtractor:
             negative_prompt = file_negative
 
         # ── Step 4: Return results ─────────────────────────────────────────────
+        width = 0
+        height = 0
+        resolution = ""
+
+        if resolved and IMAGE_SUPPORT:
+            try:
+                with Image.open(resolved) as img:
+                    img = ImageOps.exif_transpose(img)
+                    width, height = img.size
+                    resolution = f"{width}x{height}"
+            except Exception:
+                pass
+
+        if width == 0 and image_tensor is not None and isinstance(image_tensor, torch.Tensor):
+            if image_tensor.ndim == 4:
+                _, height, width, *_ = image_tensor.shape
+                if width and height:
+                    resolution = f"{width}x{height}"
+
         if not resolved:
             if image_tensor is None:
                 image_tensor = _placeholder_tensor()
+            if isinstance(image_tensor, torch.Tensor):
+                image_tensor = [image_tensor]
             mask_tensor = _placeholder_mask()
-            return positive_prompt, negative_prompt, image_tensor, mask_tensor, fallback_path
+            return (
+                positive_prompt,
+                negative_prompt,
+                image_tensor,
+                mask_tensor,
+                fallback_path,
+                width,
+                height,
+                resolution,
+            )
 
         if image_tensor is None:
             image_tensor = _placeholder_tensor()
+        if isinstance(image_tensor, torch.Tensor):
+            image_tensor = [image_tensor]
 
         # Intelligent RGB Conversion: strip alpha channel if fully opaque
-        if image_tensor is not None and image_tensor.shape[-1] == 4:
+        if isinstance(image_tensor, list):
+            image_tensor = [
+                t[:, :, :, :3] if isinstance(t, torch.Tensor) and t.shape[-1] == 4
+                and float(t[:, :, :, 3].min()) > 0.9999 else t
+                for t in image_tensor
+            ]
+        elif isinstance(image_tensor, torch.Tensor) and image_tensor.shape[-1] == 4:
             alpha = image_tensor[:, :, :, 3]
             if float(alpha.min()) > 0.9999:
                 image_tensor = image_tensor[:, :, :, :3]
@@ -1675,10 +1845,19 @@ class MetaPromptExtractor:
         # Load mask file if it exists alongside the image
         mask_tensor = _load_mask_for_image(resolved)
 
-        return positive_prompt, negative_prompt, image_tensor, mask_tensor, resolved
+        return (
+            positive_prompt,
+            negative_prompt,
+            image_tensor,
+            mask_tensor,
+            resolved,
+            width,
+            height,
+            resolution,
+        )
 
     @classmethod
-    def IS_CHANGED(cls, image="", conditioning=None, conditioning_negative=None, use_conditioning=False, prompt=None, **kwargs):
+    def IS_CHANGED(cls, image="", conditioning=None, conditioning_negative=None, use_conditioning=False, prompt=None, batch_folder="", **kwargs):
         # Build a hash of: image mtime + mask mtime (if any).
         # This ensures ComfyUI re-executes whenever the mask is saved/cleared,
         # not only when the image itself changes.
@@ -1706,6 +1885,18 @@ class MetaPromptExtractor:
                 h.update(b"no_file")
         else:
             h.update(b"no_file")
+        # Include batch folder mtime when provided so changes inside the folder re-run
+        if batch_folder and batch_folder.strip():
+            try:
+                bf = batch_folder.strip()
+                if not os.path.isabs(bf):
+                    bf = os.path.join(folder_paths.get_input_directory(), bf)
+                if os.path.isdir(bf):
+                    h.update(str(os.path.getmtime(bf)).encode())
+                else:
+                    h.update(b"no_batch_folder")
+            except Exception:
+                h.update(b"no_batch_folder")
         return h.hexdigest()
 
 # ── File Management Endpoints ─────────────────────────────────────────────────

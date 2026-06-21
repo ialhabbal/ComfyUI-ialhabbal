@@ -1201,7 +1201,7 @@ function _mpe_notifyMaskSaved(savedImagePath) {
     }
 }
 
-async function createFileBrowserModal(currentFile, onSelect) {
+async function createFileBrowserModal(currentFile, onSelect, onBatchSend = null) {
     // ─── Bookmark Management ───
     const BOOKMARKS_KEY   = "metaPromptExtractor_bookmarks";
 
@@ -1531,10 +1531,16 @@ async function createFileBrowserModal(currentFile, onSelect) {
     const homeBtn = Object.assign(document.createElement('button'), { textContent:'🏠',      title:'Home directory' });
     const rootBtn = Object.assign(document.createElement('button'), { textContent:'💾 Drives', title:'List drives' });
     const starBtn = Object.assign(document.createElement('button'), { textContent:'⭐',      title:'Add to favorites' });
-    [upBtn, homeBtn, rootBtn, starBtn].forEach(b => b.style.cssText = btnStyle);
+    // New batch-send buttons will be inserted immediately to the right of `starBtn`
+    const sendFolderBtn = Object.assign(document.createElement('button'), { textContent: 'Send Folder as Batch', title: 'Send all images in the current folder as a batch' });
+    const sendSelectedBtn = Object.assign(document.createElement('button'), { textContent: 'Send Selected Files as Batch', title: 'Send selected images as a batch' });
+    [upBtn, homeBtn, rootBtn, starBtn, sendFolderBtn, sendSelectedBtn].forEach(b => b.style.cssText = btnStyle);
     pathBar.appendChild(pathInput); pathBar.appendChild(upBtn);
     pathBar.appendChild(homeBtn);   pathBar.appendChild(rootBtn);
     pathBar.appendChild(starBtn);
+    // Insert the two new buttons immediately after the favorite/star button
+    pathBar.appendChild(sendFolderBtn);
+    pathBar.appendChild(sendSelectedBtn);
     pathBar.appendChild(searchContainer);
     
     // ─── Thumbnail size slider ───
@@ -1756,6 +1762,72 @@ async function createFileBrowserModal(currentFile, onSelect) {
     };
 
     if (selectedPath) { _updateFooterButtons(); }
+
+    // ─── Toast helper ─────────────────────────────────────────────────────────
+    const showBatchToast = (message) => {
+        try {
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:30px;right:30px;background:#1a6b4a;color:white;padding:10px 16px;border-radius:8px;font-size:13px;font-family:sans-serif;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.35);max-width:360px;transition:opacity 0.35s ease';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 350); }, 2200);
+        } catch (e) { console.warn('[MetaPromptExtractor] showBatchToast failed:', e); }
+    };
+
+    // ─── New: Batch send button handlers ─────────────────────────────────
+    // sendFolderBtn: send all supported images in currentPath (as displayed order)
+    sendFolderBtn.onclick = async () => {
+        console.log('[MetaPromptExtractor] Folder batch send start');
+        if (!onBatchSend) { alert('Batch-send is not available in this context'); return; }
+        if (!currentPath) { alert('No folder selected'); return; }
+        // Collect images in display order
+        const imageExts = ['png','jpg','jpeg','webp','gif','bmp'];
+        const files = (currentBrowseData?.entries || [])
+            .filter(e => e.type === 'file')
+            .filter(e => imageExts.includes((e.ext || '').replace(/^\./, '').toLowerCase()))
+            .map(e => e.path);
+        if (!files || files.length === 0) { alert('No supported images found in this folder'); return; }
+        console.log('[MetaPromptExtractor] Folder batch send - discovered files:', files.length);
+        try {
+            await onBatchSend(files);
+            console.log('[MetaPromptExtractor] Batch dispatched downstream');
+            showBatchToast('Folder batch ready');
+            cleanup();
+        } catch (err) {
+            console.error('[MetaPromptExtractor] Folder batch send error:', err);
+            alert('Failed to send folder batch: ' + err);
+        }
+    };
+
+    // sendSelectedBtn: send only currently selected images (preserve display order)
+    sendSelectedBtn.onclick = async () => {
+        console.log('[MetaPromptExtractor] Selected-files batch send start');
+        if (!onBatchSend) { alert('Batch-send is not available in this context'); return; }
+        if (!currentBrowseData) { alert('No folder loaded'); return; }
+        if (selectedPaths.size === 0) { alert('No files selected'); return; }
+        // Preserve current display order from the sorted grid
+        const imageExts = ['png','jpg','jpeg','webp','gif','bmp'];
+        const filteredImageFiles = currentBrowseData.entries
+            .filter(e => e.type === 'file')
+            .filter(e => imageExts.includes((e.ext || '').replace(/^\./, '').toLowerCase()));
+        const sortMethod = sortSelect.value;
+        const sortedImageFiles = sortImages(filteredImageFiles, sortMethod);
+        const files = [];
+        for (const entry of sortedImageFiles) {
+            if (selectedPaths.has(entry.path)) files.push(entry.path);
+        }
+        if (files.length === 0) { alert('No supported selected images'); return; }
+        console.log('[MetaPromptExtractor] Selected-files batch send - files:', files.length);
+        try {
+            await onBatchSend(files);
+            console.log('[MetaPromptExtractor] Batch dispatched downstream');
+            showBatchToast('Selected files batch ready');
+            cleanup();
+        } catch (err) {
+            console.error('[MetaPromptExtractor] Selected-files batch send error:', err);
+            alert('Failed to send selected files batch: ' + err);
+        }
+    };
 
     // ─── Metadata Extraction Functions ───
     const extractMetadataFromBlob = async (blob, filename) => {
@@ -3598,14 +3670,60 @@ app.registerExtension({
         console.log("[MetaPromptExtractor] Applied widgets_override:", nodeData.widgets_override);
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
+
+        function reorderMetaPromptWidgets(widgets) {
+            if (!widgets || !Array.isArray(widgets)) return;
+            const orderedNames = [
+                '📁 Browse Files',
+                'Choose File to Upload',
+                'image',
+                'Choose Batch Folder',
+                'batch_folder',
+                'use_conditioning',
+                'use conditioning',
+                '$$canvas-image-preview',
+            ];
+            const ordered = [];
+            const remaining = [];
+            const seen = new Set();
+
+            orderedNames.forEach(name => {
+                widgets.forEach(w => {
+                    if (seen.has(w)) return;
+                    if (w.name === name) {
+                        ordered.push(w);
+                        seen.add(w);
+                    }
+                });
+            });
+
+            widgets.forEach(w => {
+                if (!seen.has(w)) {
+                    remaining.push(w);
+                    seen.add(w);
+                }
+            });
+
+            widgets.length = 0;
+            widgets.push(...ordered, ...remaining);
+        }
+
         nodeType.prototype.onNodeCreated = function () {
             const result = onNodeCreated?.apply(this, arguments);
             const node = this;
 
             node.hasWorkflow          = false;
+            node.serialize_widgets    = true;
             node._loadedImageFilename = null;
             node._loadedFramePosition = null;
             node._metadataCached      = false;
+            node._mpe_setSavedImagePath = (value) => {
+                if (!node.properties) node.properties = {};
+                node.properties._mpe_imagePath = value || "";
+            };
+            node._mpe_getSavedImagePath = () => {
+                return (node.properties && node.properties._mpe_imagePath) || "";
+            };
 
             // Register this node so _mpe_notifyMaskSaved can find it.
             // Use WeakRef if available so GC'd nodes don't accumulate.
@@ -3661,11 +3779,25 @@ app.registerExtension({
             imageWidget.callback = function(value) {
                 if (origImageCb) origImageCb.apply(this, arguments);
                 node._metadataCached = false;
+                node._mpe_setSavedImagePath(value);
                 loadAndDisplayImage(node, value);
             };
 
             // ── Splice in Browse button right after image widget (same as original) ──
             const imageWidgetIndex = node.widgets.indexOf(imageWidget);
+            const clearBatchOverrides = () => {
+                const batchFileListWidget = node.widgets?.find(w => w.name === 'batch_file_list');
+                if (batchFileListWidget && batchFileListWidget.value) {
+                    batchFileListWidget.value = '';
+                    if (batchFileListWidget.callback) batchFileListWidget.callback('');
+                }
+                const batchFolderWidget = node.widgets?.find(w => w.name === 'batch_folder');
+                if (batchFolderWidget && batchFolderWidget.value) {
+                    batchFolderWidget.value = '';
+                    if (batchFolderWidget.callback) batchFolderWidget.callback('');
+                }
+            };
+
             const browseButtonHandler = async () => {
                 console.log("[MetaPromptExtractor] Browse button clicked!");
                 // Derive starting directory from current value
@@ -3690,6 +3822,7 @@ app.registerExtension({
                         if (!data.cancelled && data.path) {
                             console.log("[MetaPromptExtractor] File selected via native dialog:", data.path);
                             imageWidget.value = data.path;
+                            clearBatchOverrides();
                             if (imageWidget.callback) imageWidget.callback(data.path);
                             browseButton.name = "\uD83D\uDCC1 Browse Files";
                             node.setDirtyCanvas(true);
@@ -3710,9 +3843,32 @@ app.registerExtension({
                 node.setDirtyCanvas(true);
                 createFileBrowserModal(imageWidget.value || null, (selectedFile) => {
                     console.log("[MetaPromptExtractor] Modal returned file:", selectedFile);
+                    clearBatchOverrides();
                     imageWidget.value = selectedFile;
                     if (imageWidget.callback) imageWidget.callback(selectedFile);
                     node.setDirtyCanvas(true);
+                }, async (files) => {
+                    // onBatchSend: called when user clicks one of the new batch buttons
+                    try {
+                        console.log('[MetaPromptExtractor] JS: sending batch to node', files.length, 'files');
+                        // Find or create a widget for batch_file_list
+                        let w = node.widgets?.find(w => w.name === 'batch_file_list');
+                        if (!w) {
+                            w = { name: 'batch_file_list', type: 'string', value: '', serialize: true, callback: function(v){ node.setDirtyCanvas(true); } };
+                            if (!node.widgets) node.widgets = [];
+                            // Insert next to batch_folder if present, else after image widget
+                            const idx = node.widgets.findIndex(x => x.name === 'batch_folder');
+                            if (idx >= 0) node.widgets.splice(idx + 1, 0, w);
+                            else node.widgets.push(w);
+                        }
+                        // Store JSON array of absolute paths
+                        w.value = JSON.stringify(files);
+                        // Clear batch_folder to avoid ambiguity
+                        const bf = node.widgets?.find(w2 => w2.name === 'batch_folder'); if (bf) bf.value = '';
+                        node.setDirtyCanvas(true, true);
+                        if (app && app.graph && typeof app.graph.setDirtyCanvas === 'function') app.graph.setDirtyCanvas(true, true);
+                        console.log('[MetaPromptExtractor] JS: batch_file_list set, graph marked dirty');
+                    } catch (e) { console.error('[MetaPromptExtractor] onBatchSend error', e); alert('Batch send failed: '+e); }
                 });
             };
             
@@ -3724,6 +3880,108 @@ app.registerExtension({
                 callback:  browseButtonHandler
             };
             node.widgets.splice(imageWidgetIndex + 1, 0, browseButton);
+
+            // Add an explicit 'Choose File to Upload' button to upload local files
+            if (!node.widgets?.some(w => w.name === 'Choose File to Upload')) {
+                const uploadButton = {
+                    type: 'button',
+                    name: 'Choose File to Upload',
+                    value: null,
+                    serialize: false,
+                    callback: async () => {
+                        try {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = '.png,.jpg,.jpeg,.webp,.json';
+                            input.onchange = async () => {
+                                const file = input.files?.[0];
+                                if (!file) return;
+                                let metadata = null;
+                                try {
+                                    const ext = file.name.split('.').pop().toLowerCase();
+                                    if (ext === 'png') metadata = await getPNGMetadata(file);
+                                    else if (ext === 'webp') metadata = await getWebPMetadata(file);
+                                    else if (ext === 'jpg' || ext === 'jpeg') metadata = await getJPEGMetadata(file);
+                                } catch {}
+
+                                let resolvedFilename = file.name;
+                                try {
+                                    const formData = new FormData();
+                                    formData.append('image', file, file.name);
+                                    formData.append('overwrite', 'true');
+                                    const uploadResp = await api.fetchApi('/upload/image', { method: 'POST', body: formData });
+                                    if (uploadResp.ok) {
+                                        const uploadData = await uploadResp.json();
+                                        const sub = uploadData.subfolder ? uploadData.subfolder + '/' : '';
+                                        resolvedFilename = sub + uploadData.name;
+                                    } else {
+                                        console.warn('[MetaPromptExtractor] Upload failed');
+                                    }
+                                } catch (e) { console.warn('[MetaPromptExtractor] Upload error:', e); }
+
+                                try { await cacheFileMetadata(resolvedFilename, metadata); } catch (e) {}
+                                clearBatchOverrides();
+                                imageWidget.value = resolvedFilename;
+                                if (imageWidget.callback) imageWidget.callback(resolvedFilename);
+                                node._metadataCached = true;
+                                node.hasWorkflow = !!(metadata?.workflow || metadata?.parameters);
+                                node.setDirtyCanvas(true);
+                            };
+                            input.click();
+                        } catch (e) { console.warn('[MetaPromptExtractor] File upload error:', e); }
+                    }
+                };
+                node.widgets.splice(imageWidgetIndex + 2, 0, uploadButton);
+            }
+
+            // Insert batch-folder picker label button and folder field beneath Browse
+            if (!node.widgets?.some(w => w.name === 'batch_folder')) {
+                const batchLabelBtn = {
+                    type:      "button",
+                    name:      "Choose Batch Folder",
+                    value:     null,
+                    serialize: false,
+                    callback:  async () => {
+                        const selected = await _openFolderPickerDialog('Select batch images folder');
+                        if (selected) {
+                            const w = node.widgets?.find(w => w.name === 'batch_folder');
+                            if (w) { w.value = selected; if (w.callback) w.callback(selected); node.setDirtyCanvas(true); }
+                        }
+                    }
+                };
+
+                const batchWidget = {
+                    name:      "batch_folder",
+                    type:      "string",
+                    value:     "",
+                    serialize: true,
+                    callback:  function(v) { node.setDirtyCanvas(true); },
+                    computeSize: function() { return [300, 20]; }
+                };
+
+                node.widgets.splice(imageWidgetIndex + 2, 0, batchLabelBtn, batchWidget);
+            }
+            // If a batch_folder widget was present (from serialised data) but the
+            // button wasn't, insert the button adjacent to the existing widget so
+            // users can still open the folder picker.
+            else if (!node.widgets?.some(w => w.name === 'Choose Batch Folder')) {
+                const existingIndex = node.widgets.findIndex(w => w.name === 'batch_folder');
+                if (existingIndex >= 0) {
+                    const batchBtn = {
+                        type: 'button', name: 'Choose Batch Folder', value: null, serialize: false,
+                        callback: async () => {
+                            const selected = await _openFolderPickerDialog('Select batch images folder');
+                            if (selected) {
+                                const w = node.widgets?.find(w => w.name === 'batch_folder');
+                                if (w) { w.value = selected; if (w.callback) w.callback(selected); node.setDirtyCanvas(true); }
+                            }
+                        }
+                    };
+                    node.widgets.splice(existingIndex, 0, batchBtn);
+                }
+            }
+
+            reorderMetaPromptWidgets(node.widgets);
 
             // ── use_conditioning toggle widget ──────────────────────────────────
             // This boolean widget sits below the two conditioning input slots on
@@ -3783,14 +4041,21 @@ app.registerExtension({
                     const imageInput = this.inputs.find(inp => inp.name === "image");
                     if (imageInput && !node.widgets?.find(w => w.name === "image")) {
                         console.warn("[MetaPromptExtractor] Found 'image' input slot, converting to widget");
-                        // Create widget from the input
+                        const initialValue = imageInput.value || "(none)";
+                        const options = ["(none)", ""];
+                        if (initialValue && initialValue !== "(none)") {
+                            options.splice(1, 0, initialValue);
+                        }
+                        // Create widget from the input, preserving restored value
                         const comboWidget = {
                             name: "image",
                             type: "combo",
-                            value: "(none)",
-                            options: ["(none)", ""],
+                            value: initialValue,
+                            options,
                             callback: () => {},
                             serialize: true,
+                            computeSize: function() { return [300, 20]; },
+                            draw: function(ctx, size, pos) { },
                         };
                         if (!this.widgets) this.widgets = [];
                         this.widgets.push(comboWidget);
@@ -3802,8 +4067,13 @@ app.registerExtension({
                             newImageWidget.callback = function(value) {
                                 if (origImageCb) origImageCb.apply(this, arguments);
                                 node._metadataCached = false;
+                                if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(value);
                                 loadAndDisplayImage(node, value);
                             };
+                            if (initialValue && initialValue !== "(none)") {
+                                this.properties = this.properties || {};
+                                this.properties._mpe_imagePath = initialValue;
+                            }
                             console.log("[MetaPromptExtractor] Converted input to widget successfully");
                         }
                     }
@@ -3817,6 +4087,9 @@ app.registerExtension({
                     { name: "image",           type: "IMAGE"  },
                     { name: "mask",            type: "MASK"   },
                     { name: "path",            type: "STRING" },
+                    { name: "width",           type: "INT"    },
+                    { name: "height",          type: "INT"    },
+                    { name: "resolution",      type: "STRING" },
                 ];
                 if (this.outputs) {
                     const ok = this.outputs.length === VALID_OUTPUTS.length &&
@@ -3870,6 +4143,20 @@ app.registerExtension({
                 if (imageWidget && !browseButtonExists) {
                     console.log("[MetaPromptExtractor] Adding Browse button in onConfigure");
                     const imageWidgetIndex = this.widgets.indexOf(imageWidget);
+                    const clearBatchOverrides = () => {
+                        const batchFileListWidget = node.widgets?.find(w => w.name === 'batch_file_list');
+                        if (batchFileListWidget && batchFileListWidget.value) {
+                            batchFileListWidget.value = '';
+                            if (batchFileListWidget.callback) batchFileListWidget.callback('');
+                        }
+                        const batchFolderWidget = node.widgets?.find(w => w.name === 'batch_folder');
+                        if (batchFolderWidget && batchFolderWidget.value) {
+                            batchFolderWidget.value = '';
+                            if (batchFolderWidget.callback) batchFolderWidget.callback('');
+                        }
+                        this.setDirtyCanvas(true);
+                    };
+
                     const configBrowseHandler = async () => {
                         console.log("[MetaPromptExtractor] onConfigure Browse button clicked!");
                         let initialDir = "";
@@ -3891,6 +4178,7 @@ app.registerExtension({
                                 if (!data.cancelled && data.path) {
                                     console.log("[MetaPromptExtractor] onConfigure: File selected via native dialog:", data.path);
                                     imageWidget.value = data.path;
+                                    clearBatchOverrides();
                                     if (imageWidget.callback) imageWidget.callback(data.path);
                                     browseButton.name = "\uD83D\uDCC1 Browse Files";
                                     node.setDirtyCanvas(true);
@@ -3909,9 +4197,27 @@ app.registerExtension({
                         console.log("[MetaPromptExtractor] onConfigure: Using fallback browser modal");
                         createFileBrowserModal(imageWidget.value || null, (selectedFile) => {
                             console.log("[MetaPromptExtractor] onConfigure: Modal returned file:", selectedFile);
+                            clearBatchOverrides();
                             imageWidget.value = selectedFile;
                             if (imageWidget.callback) imageWidget.callback(selectedFile);
                             node.setDirtyCanvas(true);
+                        }, async (files) => {
+                            try {
+                                console.log('[MetaPromptExtractor] onConfigure: sending batch to node', files.length, 'files');
+                                let w = node.widgets?.find(w => w.name === 'batch_file_list');
+                                if (!w) {
+                                    w = { name: 'batch_file_list', type: 'string', value: '', serialize: true, callback: function(v){ node.setDirtyCanvas(true); } };
+                                    if (!node.widgets) node.widgets = [];
+                                    const idx = node.widgets.findIndex(x => x.name === 'batch_folder');
+                                    if (idx >= 0) node.widgets.splice(idx + 1, 0, w);
+                                    else node.widgets.push(w);
+                                }
+                                w.value = JSON.stringify(files);
+                                const bf = node.widgets?.find(w2 => w2.name === 'batch_folder'); if (bf) bf.value = '';
+                                node.setDirtyCanvas(true, true);
+                                if (app && app.graph && typeof app.graph.setDirtyCanvas === 'function') app.graph.setDirtyCanvas(true, true);
+                                console.log('[MetaPromptExtractor] onConfigure: batch_file_list set, graph marked dirty');
+                            } catch (e) { console.error('[MetaPromptExtractor] onConfigure onBatchSend error', e); alert('Batch send failed: '+e); }
                         });
                     };
                     const browseButton = {
@@ -3922,25 +4228,141 @@ app.registerExtension({
                         callback:  configBrowseHandler
                     };
                     this.widgets.splice(imageWidgetIndex + 1, 0, browseButton);
-                }
 
-                // Restore preview
-                setTimeout(() => {
-                    const fp = imageWidget.value || "";
-                    if (fp && fp !== "(none)" && fp !== "") {
-                        loadAndDisplayImage(node, fp);
+                    // Add batch-folder picker label and field beneath the Browse button
+                    const batchLabelBtn = {
+                        type:      "button",
+                        name:      "Choose Batch Folder",
+                        value:     null,
+                        serialize: false,
+                        callback:  async () => {
+                            const newFolder = await _openFolderPickerDialog('Select batch images folder');
+                            if (newFolder) {
+                                const w = this.widgets?.find(w => w.name === 'batch_folder');
+                                if (w) { w.value = newFolder; if (w.callback) w.callback(newFolder); this.setDirtyCanvas(true); }
+                            }
+                        }
+                    };
+
+
+                    const batchWidget = {
+                        name:      "batch_folder",
+                        type:      "string",
+                        value:     "",
+                        serialize: true,
+                        callback:  function(v) { node.setDirtyCanvas(true); },
+                        computeSize: function() { return [300, 20]; }
+                    };
+
+                    if (!this.widgets?.some(w => w.name === 'batch_folder')) {
+                        this.widgets.splice(imageWidgetIndex + 2, 0, batchLabelBtn, batchWidget);
+                    } else if (!this.widgets?.some(w => w.name === 'Choose Batch Folder')) {
+                        const existingIndex = this.widgets.findIndex(w => w.name === 'batch_folder');
+                        if (existingIndex >= 0) {
+                            const batchBtn = {
+                                type: 'button', name: 'Choose Batch Folder', value: null, serialize: false,
+                                callback: async () => {
+                                    const newFolder = await _openFolderPickerDialog('Select batch images folder');
+                                    if (newFolder) {
+                                        const w = this.widgets?.find(w => w.name === 'batch_folder');
+                                        if (w) { w.value = newFolder; if (w.callback) w.callback(newFolder); this.setDirtyCanvas(true); }
+                                    }
+                                }
+                            };
+                            this.widgets.splice(existingIndex, 0, batchBtn);
+                        }
+                    }
+
+                    // Add explicit upload button in onConfigure as well
+                    if (!this.widgets?.some(w => w.name === 'Choose File to Upload')) {
+                        const uploadButton = {
+                            type: 'button', name: 'Choose File to Upload', value: null, serialize: false,
+                            callback: async () => {
+                                try {
+                                    const input = document.createElement('input'); input.type = 'file';
+                                    input.accept = '.png,.jpg,.jpeg,.webp,.json';
+                                    input.onchange = async () => {
+                                        const file = input.files?.[0]; if (!file) return;
+                                        let metadata = null;
+                                        try {
+                                            const ext = file.name.split('.').pop().toLowerCase();
+                                            if (ext === 'png') metadata = await getPNGMetadata(file);
+                                            else if (ext === 'webp') metadata = await getWebPMetadata(file);
+                                            else if (ext === 'jpg' || ext === 'jpeg') metadata = await getJPEGMetadata(file);
+                                        } catch {}
+                                        let resolvedFilename = file.name;
+                                        try {
+                                            const formData = new FormData(); formData.append('image', file, file.name); formData.append('overwrite', 'true');
+                                            const uploadResp = await api.fetchApi('/upload/image', { method: 'POST', body: formData });
+                                            if (uploadResp.ok) { const uploadData = await uploadResp.json(); const sub = uploadData.subfolder ? uploadData.subfolder + '/' : ''; resolvedFilename = sub + uploadData.name; }
+                                        } catch (e) { console.warn('[MetaPromptExtractor] Upload error:', e); }
+                                        try { await cacheFileMetadata(resolvedFilename, metadata); } catch (e) {}
+                                        clearBatchOverrides();
+                                        imageWidget.value = resolvedFilename;
+                                        if (imageWidget.callback) imageWidget.callback(resolvedFilename);
+                                        node._metadataCached = true;
+                                        node.hasWorkflow = !!(metadata?.workflow || metadata?.parameters);
+                                        node.setDirtyCanvas(true);
+                                    };
+                                    input.click();
+                                } catch (e) { console.warn('[MetaPromptExtractor] File upload error:', e); }
+                            }
+                        };
+                        this.widgets.splice(imageWidgetIndex + 2, 0, uploadButton);
+                    }
+
+                    reorderMetaPromptWidgets(this.widgets);
+
+            const previewWidget = this.widgets?.find(w => w.name === '$$canvas-image-preview');
+            if (previewWidget) {
+                const originalPreviewDraw = previewWidget.draw;
+                previewWidget.draw = function(ctx, size, pos) {
+                    if (originalPreviewDraw) originalPreviewDraw.apply(this, arguments);
+                    drawMetaPromptExtractorImagePreview(node, ctx, size, pos);
+                };
+            } else {
+                const originalOnDrawForeground = this.onDrawForeground;
+                this.onDrawForeground = function(ctx) {
+                    if (originalOnDrawForeground) originalOnDrawForeground.call(this, ctx);
+                    drawMetaPromptExtractorImagePreview(this, ctx);
+                };
+            }
+        }
+
+                const restoreImagePreview = () => {
+                    const candidatePath = (imageWidget?.value || "" ) || (this.properties?._mpe_imagePath || "");
+                    if (candidatePath && candidatePath !== "(none)" && candidatePath !== "") {
+                        if (node._loadedImageFilename !== candidatePath || !node.imgs?.length) {
+                            if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(candidatePath);
+                            loadAndDisplayImage(node, candidatePath);
+                        }
+                        return true;
+                    }
+                    return false;
+                };
+
+                let restoreAttempts = 0;
+                const tryRestore = () => {
+                    const restored = restoreImagePreview();
+                    if (restored) return;
+                    restoreAttempts += 1;
+                    if (restoreAttempts < 6) {
+                        setTimeout(tryRestore, 200);
                     } else {
                         showPlaceholder(node);
                     }
-                }, 100);
+                };
+                tryRestore();
 
                 return r;
             };
 
             // ── Initial load ──
             setTimeout(() => {
-                const fp = imageWidget.value || "";
+                const savedPath = node._mpe_getSavedImagePath ? node._mpe_getSavedImagePath() : "";
+                const fp = imageWidget.value || savedPath || "";
                 if (fp && fp !== "(none)" && fp !== "") {
+                    if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(fp);
                     loadAndDisplayImage(node, fp);
                 } else {
                     showPlaceholder(node);
@@ -4005,6 +4427,7 @@ app.registerExtension({
 
                 // ── Step 4: Update widget and node state. ──
                 imageWidget.value   = resolvedFilename;
+                if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(resolvedFilename);
                 node._metadataCached = true;
                 node.hasWorkflow    = !!(metadata?.workflow || metadata?.parameters);
 
@@ -4023,8 +4446,6 @@ app.registerExtension({
                     node.imgs = [img];
                     node.imageIndex = 0;
                     node._loadedImageFilename = resolvedFilename;
-                    const w = Math.max(node.size[0], 256);
-                    node.setSize([w, Math.max(node.size[1], img.naturalHeight * (w / img.naturalWidth) + 100)]);
                     node.setDirtyCanvas(true, true);
                 };
                 img.src = blobUrl;
@@ -4107,6 +4528,7 @@ async function loadAndDisplayImage(node, filename) {
         return;
     }
 
+    if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(filename);
     loadImageFile(node, filename);
 }
 
@@ -4147,14 +4569,7 @@ async function loadImageFile(node, filename) {
         img.onload = () => {
             node.imgs = [img];
             node.imageIndex = 0;
-            // Track that this image is now loaded
             node._loadedImageFilename = filename;
-
-            // Resize node to fit image (like Load Image does)
-            const targetWidth = Math.max(node.size[0], 256);
-            const targetHeight = Math.max(node.size[1], img.naturalHeight * (targetWidth / img.naturalWidth) + 100);
-            node.setSize([targetWidth, targetHeight]);
-
             node.setDirtyCanvas(true, true);
             app.graph.setDirtyCanvas(true, true);
         };
@@ -4201,6 +4616,62 @@ function showPlaceholder(node) {
         app.graph.setDirtyCanvas(true, true);
     };
     placeholderImg.src = canvas.toDataURL('image/png');
+}
+
+function getMetaPromptExtractorPreviewRect(node) {
+    const width = node.size[0] || 0;
+    let y = 0;
+    if (node.widgets && node.widgets.length) {
+        for (const widget of node.widgets) {
+            if (widget.hidden) continue;
+            const size = typeof widget.computeSize === 'function' ? widget.computeSize(width) : [width, 18];
+            const widgetHeight = Math.max(0, size[1] || 0);
+            if (widget.name === '$$canvas-image-preview') {
+                return { x: 0, y, width, height: widgetHeight };
+            }
+            y += widgetHeight;
+        }
+    }
+    return { x: 0, y, width, height: Math.max(0, node.size[1] - y) };
+}
+
+function drawMetaPromptExtractorImagePreview(node, ctx, size, pos) {
+    if (!node.imgs || node.imgs.length === 0) return;
+    const index = Number.isInteger(node.imageIndex) ? node.imageIndex : 0;
+    const image = node.imgs[index];
+    if (!image || !image.naturalWidth || !image.naturalHeight) return;
+
+    const rect = size && pos ? {
+        x: pos[0],
+        y: pos[1],
+        width: size[0],
+        height: size[1],
+    } : getMetaPromptExtractorPreviewRect(node);
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+    const imageAspect = image.naturalWidth / image.naturalHeight;
+    const areaAspect = rect.width / rect.height;
+    let drawWidth, drawHeight;
+
+    if (imageAspect > areaAspect) {
+        drawWidth = rect.width;
+        drawHeight = rect.width / imageAspect;
+    } else {
+        drawHeight = rect.height;
+        drawWidth = rect.height * imageAspect;
+    }
+
+    const dx = rect.x + (rect.width - drawWidth) / 2;
+    const dy = rect.y + (rect.height - drawHeight) / 2;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    if (ctx.imageSmoothingQuality !== undefined) ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, dx, dy, drawWidth, drawHeight);
+    ctx.restore();
 }
 
 console.log("[MetaPromptExtractor] Extension loaded");
