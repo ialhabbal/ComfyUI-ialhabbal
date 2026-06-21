@@ -10,7 +10,7 @@ A suite of ComfyUI custom nodes for image processing, image-vision, video-vision
 
 1. **Prompt Verify** — Review and approve prompts before generation
 2. **Compare** — Side-by-side image comparison with interactive controls
-3. **Meta Prompt Extractor** — Extract prompts from images with a full file browser
+3. **Meta Prompt Extractor** — Extract prompts from images with a full file browser, batch files/folder loading and processing.
 4. **Occlusion Mask** — Protect objects in front of faces during faceswaps
 5. **Loader for Batch Image Processing** — Load and process image batches
 6. **PhotoLab** — Film effects and advanced skin retouching for portraits
@@ -191,29 +191,39 @@ The node renders both images in a combined preview that you can interact with:
 
 ### What It Does
 
-Point the node at any PNG, JPG, WebP, or JSON file and it outputs five things your workflow can use immediately:
+Point the node at any PNG, JPG, JPEG, WebP, or JSON file and it returns the following outputs your workflow can use immediately:
 
-- **Positive prompt** — The main generation text
-- **Negative prompt** — The negative text
-- **Image** — The image as a ComfyUI tensor
-- **Mask** — A mask you painted in the built-in Mask Editor
-- **Path** — The full file path as a string
-- **Conditioning** — Accepts input from previous ClipTextEncode positive
-- **Conditioning Negative** — Accepts input from previous ClipTextEncode Negative
+- **positive_prompt** — The main generation text extracted from metadata or workflow files
+- **negative_prompt** — The negative prompt text
+- **image** — The image as a ComfyUI tensor list (single or batch)
+- **mask** — A mask loaded from a matching `<image>_mask.png` file or created with the Mask Editor
+- **path** — The full file path as a string
+- **width** — The image width in pixels
+- **height** — The image height in pixels
+- **resolution** — Resolution string such as `512x512`
+
+The node also accepts:
+
+- **conditioning** — optional positive conditioning input
+- **conditioning_negative** — optional negative conditioning input
+- **use_conditioning** — when ON, conditioning inputs override file-based prompt extraction
+- **batch_folder** — folder path for batch processing of supported files
+- **batch_file_list** — JSON string array of exact file paths for explicit batch loads
 
 ### Features
 
 - **Full filesystem browser** — Navigate any folder on any drive with breadcrumb navigation
+- **Batch folder / explicit file list** — load many images and metadata files in one pass
 - **Image thumbnail grid** — Preview with adjustable grid density and lazy loading
 - **Metadata detection** — Images with embedded data show a 📋 badge
-- **Real-time search** — Filter by filename or restrict to metadata-only files
+- **Real-time search** — Filter by filename or metadata-only files
 - **Flexible sorting** — Sort by name, date, size, dimensions, or metadata
-- **Multi-selection** — Use checkboxes or Shift+click for ranges
+- **Multi-selection** — Use checkboxes, Ctrl+click, or Shift+click ranges
 - **Metadata preview panel** — View all embedded metadata for selected images
 - **Favorites system** — Save frequently used folders as shortcuts
 - **Right-click menu** — Rename, copy, move, delete, or open files in Explorer
 - **Mask Editor** — Paint inpainting masks directly on images
-- **Drag and drop** — Drop files directly from your OS onto the node
+- **Drag and drop** — Drop files from your OS onto the node
 - **Persistent window** — Browser remembers size, position, folder, and settings
 
 ## Screenshots
@@ -498,27 +508,29 @@ A powerful image-saving node that gives you full control over *where*, *when*, a
 
 ### Features
 
-- **One-click manual save** — save selected images only
-- **AutoSave** — automatically save every generated image
+- **One-click manual save** — save selected images immediately
+- **Save All Images** — save every image in the current batch
+- **AutoSave** — automatically save newly generated images and deduplicate repeated frames by pixel content
 - **Browse & Set Save Path** — native folder dialog
 - **Favorite Folders** — bookmark save locations
-- **Save History** — view last 50 saved files
+- **Save History** — view the last 50 saved files
 - **Timestamp or counter filenames** — sequential or date-time naming
 - **Multiple formats** — PNG, JPEG, WebP
-- **A/B Compare** — side-by-side comparison directly on node
+- **Compare mode** — interactive A/B comparison when `original_image` is connected
 - **Absolute paths** — save anywhere on your system
-- **Metadata preserved** — workflow and prompt in PNG files
+- **Metadata preserved** — prompt/workflow metadata is saved into PNG files
+- **Preview support for external folders** — external save locations still generate a temp preview copy for the UI
 
 ### Node Inputs
 
 | Input | What it does |
 |---|---|
 | **images** | The image(s) from your workflow |
-| **original_image** | Optional second image for comparison |
+| **original_image** | Optional second image for comparison when Compare is ON |
 
 ### Settings
 
-**AutoSave** — Toggle ON/OFF. When ON, all images are saved automatically.
+**AutoSave** — Toggle ON/OFF. When ON, images are saved automatically and manual Save is disabled unless Compare mode is active.
 
 **Filename Prefix** — Controls folder and filename.
 
@@ -532,9 +544,9 @@ A powerful image-saving node that gives you full control over *where*, *when*, a
 
 **Quality** — 1–100 (for JPEG/WebP)
 
-**Timestamp** — Toggle ON to use date-time naming instead of counter
+**Timestamp** — Toggle ON to use date-time naming instead of a counter
 
-**Compare Mode** — Toggle ON for side-by-side comparison viewer
+**Compare Mode** — Toggle ON for side-by-side comparison using the optional `original_image`
 
 ### Comparison Modes
 
@@ -545,10 +557,12 @@ A powerful image-saving node that gives you full control over *where*, *when*, a
 
 ### Buttons
 
-- **Save** — Manually save current image
-- **Browse & Set Save Path** — Native folder picker
-- **Favorites** — Open folder shortcuts panel
-- **History** — View last 50 saved files
+- **Save** — manually save current image
+- **Save All Images** — save every image in the current batch
+- **Browse & Set Save Path** — native folder picker
+- **Open Output Folder** — open the target save folder
+- **Save History** — view recent saved files
+- **Favorite Folders** — open folder shortcuts panel
 
 ### File Naming
 
@@ -558,9 +572,9 @@ The counter is stored in `.save_it_counter` inside your save folder — each fol
 
 ### Tips
 
-- **Save only best generations** → Leave AutoSave OFF, manually save what you want
+- **Save only best generations** → Leave AutoSave OFF and manually save what you want
 - **Save everything automatically** → Turn AutoSave ON and organize with folder prefixes
-- **Compare before/after** → Connect original image and toggle Compare Mode
+- **Compare before/after** → Connect `original_image` and toggle Compare Mode
 - **Many projects** → Use Favorites for quick switching
 - **Time-sorted files** → Turn Timestamp ON
 
