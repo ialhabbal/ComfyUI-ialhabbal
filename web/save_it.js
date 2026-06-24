@@ -940,7 +940,7 @@ app.registerExtension({
                     // doSave() is still needed for the manual-save button flow.
                     const _alreadySavedByBackend =
                         isAutoSave() &&
-                        output?.images?.[0]?.type === "output";
+                        output?.images?.some((img) => img?.type === "output" || img?.saved_by_backend);
 
                     if (!_alreadySavedByBackend && isAutoSave() && this.currentImageA) {
                         const src = this.currentImageA.src;

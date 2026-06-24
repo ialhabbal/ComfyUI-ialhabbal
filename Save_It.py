@@ -672,7 +672,8 @@ class Save_It:
                             results.append({
                                 "filename": new_filename,
                                 "subfolder": "",
-                                "type": "temp"
+                                "type": "temp",
+                                "saved_by_backend": True
                             })
                         except Exception:
                             # If anything goes wrong, still return the output
