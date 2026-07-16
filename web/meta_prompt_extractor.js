@@ -3638,6 +3638,31 @@ function isPreviewableFile(filename) {
     return imageExtensions.includes(ext);
 }
 
+function logMetaPromptExtractorState(label, node, info = null) {
+    const imageWidget = node?.widgets?.find(w => w.name === 'image');
+    const previewWidget = node?.widgets?.find(w => w.name === '$$canvas-image-preview');
+    const previewImage = node?.imgs?.[node?.imageIndex ?? 0];
+    const savedPath = node?._mpe_getSavedImagePath ? node._mpe_getSavedImagePath() : '';
+    console.log(`[MetaPromptExtractor] STATE ${label}`, {
+        nodeId: node?.id,
+        imagePath: (imageWidget?.value || '').toString(),
+        savedPath,
+        widgetValue: imageWidget?.value,
+        properties: node?.properties,
+        widgetsValues: info?.widgets_values || node?.widgets_values,
+        previewImageExists: !!previewImage,
+        previewImageNaturalSize: previewImage ? { width: previewImage.naturalWidth, height: previewImage.naturalHeight } : null,
+        loadedImageFilename: node?._loadedImageFilename,
+        imgsLength: node?.imgs?.length || 0,
+        customState: {
+            _loadedImageFilename: node?._loadedImageFilename,
+            _loadedFramePosition: node?._loadedFramePosition,
+            _metadataCached: node?._metadataCached,
+        },
+        previewWidgetExists: !!previewWidget,
+    });
+}
+
 console.log("[MetaPromptExtractor] Extension starting registration...");
 
 app.registerExtension({
@@ -3724,6 +3749,34 @@ app.registerExtension({
             node._mpe_getSavedImagePath = () => {
                 return (node.properties && node.properties._mpe_imagePath) || "";
             };
+            // ── use_conditioning: independent persistence, mirroring the image-path
+            // pattern above. LiteGraph's own internal widgets_values restoration
+            // (which runs before any of our hooks fire) can misassign this widget's
+            // value on tab-switch/graph-configure. node.properties is untouched by
+            // that mechanism, so we use it as the source of truth and re-apply it
+            // to the widget ourselves once we get control in onConfigure.
+            node._mpe_setSavedUseConditioning = (value) => {
+                if (!node.properties) node.properties = {};
+                node.properties._mpe_useConditioning = !!value;
+            };
+            node._mpe_getSavedUseConditioning = () => {
+                return !!(node.properties && node.properties._mpe_useConditioning);
+            };
+            {
+                const earlyToggle = node.widgets?.find(w => w.name === "use conditioning" || w.name === "use_conditioning");
+                if (earlyToggle) {
+                    // Seed our backing store from whatever the widget currently holds
+                    // (true default-false on brand-new nodes), then wrap its callback
+                    // so any future user click keeps the backing store in sync.
+                    node._mpe_setSavedUseConditioning(earlyToggle.value);
+                    const origToggleCb = earlyToggle.callback;
+                    earlyToggle.callback = function(v) {
+                        if (origToggleCb) origToggleCb.apply(this, arguments);
+                        node._mpe_setSavedUseConditioning(v);
+                    };
+                }
+            }
+
 
             // Register this node so _mpe_notifyMaskSaved can find it.
             // Use WeakRef if available so GC'd nodes don't accumulate.
@@ -4014,6 +4067,14 @@ app.registerExtension({
                 );
                 if (!isCondSlot) return;
 
+                // LiteGraph's own configure()/restore path fires this callback with
+                // connected=true for every input slot on the node — including slots
+                // that have no wire at all — passing link_info=null. A genuine user
+                // connection always carries a real link object. Without this check,
+                // simply loading/restoring the graph (e.g. switching workflow tabs)
+                // forces this toggle to true regardless of the user's actual setting.
+                if (connected && !link_info) return;
+
                 const toggle = this.widgets?.find(w => w.name === "use conditioning" || w.name === "use_conditioning");
                 if (!toggle) return;
 
@@ -4026,6 +4087,7 @@ app.registerExtension({
                         toggle.value = false;
                     }
                 }
+                if (this._mpe_setSavedUseConditioning) this._mpe_setSavedUseConditioning(toggle.value);
                 this.setDirtyCanvas(true);
             };
 
@@ -4033,6 +4095,23 @@ app.registerExtension({
             const origConfigure = node.onConfigure;
             node.onConfigure = function(info) {
                 console.log("[MetaPromptExtractor] onConfigure called, inputs:", this.inputs?.map(i => i.name) || []);
+                logMetaPromptExtractorState('onConfigure:start', this, info);
+
+                // LiteGraph's own internal widgets_values restoration (which runs
+                // before this hook fires at all) can misassign use_conditioning's
+                // value to/from a neighboring widget. The serialized array itself is
+                // intact though, so read this widget's own value directly from it,
+                // by its own current position, rather than trusting whatever value
+                // LiteGraph already (possibly wrongly) applied to the widget object.
+                let _mpeCorrectedUseConditioning = null;
+                {
+                    const idx = this.widgets?.findIndex(w => w.name === "use conditioning" || w.name === "use_conditioning");
+                    if (idx !== undefined && idx !== -1 && Array.isArray(info?.widgets_values) && idx < info.widgets_values.length) {
+                        const raw = info.widgets_values[idx];
+                        if (typeof raw === "boolean") _mpeCorrectedUseConditioning = raw;
+                    }
+                }
+
                 const r = origConfigure ? origConfigure.apply(this, arguments) : undefined;
 
                 // ── CRITICAL: Convert inputs to widgets before removing them ──
@@ -4131,10 +4210,42 @@ app.registerExtension({
                         value:     false,
                         serialize: true,
                         options:   { on: "", off: "" },
-                        callback:  function(v) { node.setDirtyCanvas(true); },
+                        callback:  function(v) {
+                            node.setDirtyCanvas(true);
+                            if (node._mpe_setSavedUseConditioning) node._mpe_setSavedUseConditioning(v);
+                        },
                     };
                     if (!this.widgets) this.widgets = [];
                     this.widgets.push(toggleWidget);
+                } else {
+                    const toggleWidget = this.widgets?.find(w => w.name === "use conditioning" || w.name === "use_conditioning");
+                    if (toggleWidget && (toggleWidget.value === undefined || toggleWidget.value === null || toggleWidget.value === "")) {
+                        toggleWidget.value = false;
+                    }
+                    if (toggleWidget && !toggleWidget._mpe_cbWrapped) {
+                        toggleWidget._mpe_cbWrapped = true;
+                        const origToggleCb = toggleWidget.callback;
+                        toggleWidget.callback = function(v) {
+                            if (origToggleCb) origToggleCb.apply(this, arguments);
+                            if (node._mpe_setSavedUseConditioning) node._mpe_setSavedUseConditioning(v);
+                        };
+                    }
+                }
+
+                // Apply the authoritative value: prefer the value read directly from
+                // this restore's own serialized array (bypassing LiteGraph's buggy
+                // internal assignment); otherwise fall back to our own independently
+                // tracked value (which also covers the live "real connection" case,
+                // since onConnectionsChange runs before this and already persisted it).
+                {
+                    const toggleWidget = this.widgets?.find(w => w.name === "use conditioning" || w.name === "use_conditioning");
+                    if (toggleWidget) {
+                        const finalValue = (_mpeCorrectedUseConditioning !== null)
+                            ? _mpeCorrectedUseConditioning
+                            : (this._mpe_getSavedUseConditioning ? this._mpe_getSavedUseConditioning() : false);
+                        toggleWidget.value = finalValue;
+                        if (this._mpe_setSavedUseConditioning) this._mpe_setSavedUseConditioning(finalValue);
+                    }
                 }
 
                 // ── Ensure Browse button exists ──
@@ -4330,14 +4441,38 @@ app.registerExtension({
         }
 
                 const restoreImagePreview = () => {
-                    const candidatePath = (imageWidget?.value || "" ) || (this.properties?._mpe_imagePath || "");
-                    if (candidatePath && candidatePath !== "(none)" && candidatePath !== "") {
+                    const serializedWidgetValues = Array.isArray(info?.widgets_values) ? info.widgets_values : null;
+                    let candidatePath = '';
+                    if (imageWidget?.value && imageWidget.value !== '(none)') {
+                        candidatePath = imageWidget.value;
+                    } else if (serializedWidgetValues && imageWidget) {
+                        const widgetIndex = this.widgets?.indexOf(imageWidget);
+                        if (widgetIndex >= 0 && serializedWidgetValues[widgetIndex] && serializedWidgetValues[widgetIndex] !== '(none)') {
+                            candidatePath = serializedWidgetValues[widgetIndex];
+                        }
+                    }
+                    if (!candidatePath) {
+                        candidatePath = this.properties?._mpe_imagePath || '';
+                    }
+                    if (!candidatePath && serializedWidgetValues) {
+                        const fallbackPath = serializedWidgetValues.find(v => typeof v === 'string' && v && v !== '(none)');
+                        if (fallbackPath) candidatePath = fallbackPath;
+                    }
+                    if (candidatePath && candidatePath !== '(none)' && candidatePath !== '') {
+                        if (imageWidget && imageWidget.value !== candidatePath) {
+                            imageWidget.value = candidatePath;
+                        }
+                        if (this.properties && this.properties._mpe_imagePath !== candidatePath) {
+                            this.properties._mpe_imagePath = candidatePath;
+                        }
                         if (node._loadedImageFilename !== candidatePath || !node.imgs?.length) {
                             if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(candidatePath);
                             loadAndDisplayImage(node, candidatePath);
                         }
+                        logMetaPromptExtractorState('onConfigure:restored', node, info);
                         return true;
                     }
+                    logMetaPromptExtractorState('onConfigure:missing-path', node, info);
                     return false;
                 };
 
@@ -4353,6 +4488,7 @@ app.registerExtension({
                     }
                 };
                 tryRestore();
+                logMetaPromptExtractorState('onConfigure:end', this, info);
 
                 return r;
             };
@@ -4361,6 +4497,7 @@ app.registerExtension({
             setTimeout(() => {
                 const savedPath = node._mpe_getSavedImagePath ? node._mpe_getSavedImagePath() : "";
                 const fp = imageWidget.value || savedPath || "";
+                logMetaPromptExtractorState('onNodeCreated:initial', node);
                 if (fp && fp !== "(none)" && fp !== "") {
                     if (node._mpe_setSavedImagePath) node._mpe_setSavedImagePath(fp);
                     loadAndDisplayImage(node, fp);
@@ -4572,6 +4709,7 @@ async function loadImageFile(node, filename) {
             node._loadedImageFilename = filename;
             node.setDirtyCanvas(true, true);
             app.graph.setDirtyCanvas(true, true);
+            logMetaPromptExtractorState('loadImageFile:loaded', node);
         };
 
         img.onerror = () => {
@@ -4614,6 +4752,7 @@ function showPlaceholder(node) {
         node.imageIndex = 0;
         node.setDirtyCanvas(true, true);
         app.graph.setDirtyCanvas(true, true);
+        logMetaPromptExtractorState('showPlaceholder:loaded', node);
     };
     placeholderImg.src = canvas.toDataURL('image/png');
 }
