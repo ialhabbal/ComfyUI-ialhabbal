@@ -409,10 +409,9 @@ def save_compare_images(image_a, original_image, filename_prefix, compress_level
     Replacement for previous compare helper.
     
     Saves two images into the temp directory with a shared prefix and
-    returns a UI-style dict: {"ui": {"images": [img_a, img_b]}}
-    where each img is a dict {filename, subfolder, type} (type == "temp").
+    returns the image entries under the keys consumed by the native
+    image-compare widget: {"ui": {"a_images": [...], "b_images": [...]}}.
     """
-    results = []
     output_dir = folder_paths.get_temp_directory()
 
     # Robust checks for inputs (avoid evaluating a Tensor's truthiness)
@@ -434,7 +433,7 @@ def save_compare_images(image_a, original_image, filename_prefix, compress_level
         first_tensor = original_image[0] if not isinstance(original_image, torch.Tensor) else original_image[0]
 
     if first_tensor is None:
-        return {"ui": {"images": results}}
+        return {"ui": {"a_images": [], "b_images": []}}
 
     arr0 = first_tensor.cpu().numpy()
     if arr0.ndim == 3 and arr0.shape[0] in (1, 3, 4):
@@ -472,15 +471,15 @@ def save_compare_images(image_a, original_image, filename_prefix, compress_level
         counter += 1
         return entry
 
-    a_entry = _save_one(image_a)
-    if a_entry:
-        results.append(a_entry)
+    generated_entry = _save_one(image_a)
+    original_entry = _save_one(original_image)
 
-    b_entry = _save_one(original_image)
-    if b_entry:
-        results.append(b_entry)
-
-    return {"ui": {"images": results}}
+    return {
+        "ui": {
+            "a_images": [original_entry] if original_entry else [],
+            "b_images": [generated_entry] if generated_entry else [],
+        }
+    }
 
 
 # ─── Node ─────────────────────────────────────────────────────────────────────
@@ -586,7 +585,7 @@ class Save_It:
                 prompt=prompt,
                 extra_pnginfo=extra_pnginfo,
             )
-            # `save_compare_images` returns a dict in the form {"ui": {"images": [...]}}
+            # `save_compare_images` returns separate A/B UI image entries.
             return compare_ui
 
         # ORIGINAL (unchanged) - Standard Save_It behavior when compare is disabled

@@ -31,7 +31,13 @@ A suite of ComfyUI custom nodes for image processing, image-vision, video-vision
 Most nodes use standard ComfyUI libraries. **OcclusionMask** requires additional packages:
 
 ```bash
-pip install insightface onnxruntime opencv-python numpy Pillow retina-face ultralytics segment-anything
+pip install insightface onnxruntime opencv-python numpy Pillow albumentations retina-face ultralytics segment-anything
+```
+
+If **OcclusionMask** fails to import with `cannot import name 'median_blur' from 'albucore'`, the installed Albumentations and Albucore versions are incompatible. Using the same Python executable that launches ComfyUI, reinstall both packages so pip resolves a matching pair:
+
+```bash
+<path-to-ComfyUI-python> -m pip install --upgrade --force-reinstall albumentations albucore
 ```
 
 <details>
@@ -592,7 +598,7 @@ The counter is stored in `.save_it_counter` inside your save folder — each fol
 
 For **Occlusion Mask**:
 ```bash
-pip install insightface onnxruntime opencv-python retina-face ultralytics segment-anything
+pip install insightface onnxruntime opencv-python albumentations retina-face ultralytics segment-anything
 ```
 
 ---

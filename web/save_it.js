@@ -760,6 +760,8 @@ app.registerExtension({
                 const origCmpCb = enableCmpWidget.callback;
                 enableCmpWidget.callback = function (value) {
                     origCmpCb?.call(this, value);
+                    nativeCmpWidget.hidden =
+                        !(typeof LiteGraph !== "undefined" && LiteGraph.vueNodesMode && value);
                     if (value) {
                         saveBtn.disabled = false;
                         try { if (autosaveWidget) { autosaveWidget.value = false; autosaveWidget.disabled = true; } } catch (_) {}
@@ -768,8 +770,8 @@ app.registerExtension({
                         self.currentImageA = null; self.currentImageB = null;
                         try { if (autosaveWidget) { autosaveWidget.disabled = false; } } catch (_) {}
                         saveBtn.disabled = (getWidget("autosave")?.value ?? false);
-                        app.graph.setDirtyCanvas(true, true);
                     }
+                    app.graph.setDirtyCanvas(true, true);
                 };
             }
 
@@ -897,6 +899,21 @@ app.registerExtension({
                 if (!on) return;
             };
 
+            // Nodes 2.0 has a native image-compare component. The legacy
+            // frontend continues to use the node-level canvas renderer below.
+            const nativeCmpWidget = this.addWidget(
+                "imagecompare",
+                "compare_view",
+                ["", ""],
+                () => {},
+                {
+                    hideInPanel: true,
+                    hidden: !(typeof LiteGraph !== "undefined" && LiteGraph.vueNodesMode && isCmpOn())
+                }
+            );
+            nativeCmpWidget.serialize = false;
+            nativeCmpWidget.computeSize = (width) => [width, 0];
+
             // ── onExecuted: autosave + compare image loading ───────────────
             const _origOnExecuted = this.onExecuted;
             this.onExecuted = function (output) {
@@ -954,8 +971,10 @@ app.registerExtension({
 
                 // Compare mode
                 this.imgs = null;
+                const generatedImage = output?.b_images?.[0] ?? output?.images?.[0];
+                const originalImage = output?.a_images?.[0] ?? output?.images?.[1];
 
-                if (!output?.images || output.images.length < 2) {
+                if (!generatedImage || !originalImage) {
                     this._cmpImg1 = null; this._cmpImg2 = null;
                     this.currentImageA = null; this.currentImageB = null;
                     app.graph.setDirtyCanvas(true, true);
@@ -970,13 +989,12 @@ app.registerExtension({
                         if (idx === 0) this._cmpImg1 = img; else this._cmpImg2 = img;
                         if (this._cmpImg1) this.currentImageA = this._cmpImg1;
                         if (this._cmpImg2) this.currentImageB = this._cmpImg2;
-                        if (this._cmpImg1 && this._cmpImg2) this.imgs = [this._cmpImg1, this._cmpImg2];
                         app.graph.setDirtyCanvas(true, true);
                     };
                     img.src = url;
                 };
-                load(output.images[0], 0);
-                load(output.images[1], 1);
+                load(generatedImage, 0);
+                load(originalImage, 1);
             };
 
             // ── onDrawBackground ───────────────────────────────────────────
@@ -999,7 +1017,6 @@ app.registerExtension({
                     _origDraw?.call(this, ctx);
                     return;
                 }
-
                 // Let original draw run first (keeps node frame, title, etc.)
                 _origDraw?.call(this, ctx);
 
@@ -1209,7 +1226,9 @@ app.registerExtension({
 
             // Set initial node size
             this.size[0] = INIT_W;
-            this.size[1] = INIT_W + 200; // will auto-adjust on first draw
+            if (typeof LiteGraph === "undefined" || !LiteGraph.vueNodesMode) {
+                this.size[1] = INIT_W + 200;
+            }
         };
     }
 });
